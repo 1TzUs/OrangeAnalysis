@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>战报分析</title>
+  <link rel="icon" type="image/jpeg" href="/orange.jpg" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <h1 class="app-title"><img src="/orange.jpg" alt="战报分析" class="app-logo" /> 战报分析</h1>
+      <p>上传战报截图，自动识别阵容、同盟与胜负关系</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- 导航 -->
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="parse">📷 战报识别</button>
+      <button class="tab-btn" data-tab="analyze">📊 数据分析</button>
+    </nav>
+
+    <!-- 识别页 -->
+    <section id="tab-parse" class="tab-panel">
+      <!-- 识别模式切换 -->
+      <div class="mode-switch" role="group" aria-label="识别模式">
+        <button type="button" class="mode-btn active" data-mode="pc">🖥️ PC 横屏</button>
+        <button type="button" class="mode-btn" data-mode="portrait">📱 PE 竖屏</button>
+      </div>
+
+      <!-- 上传区 -->
+      <section id="upload-zone" class="upload-zone">
+        <input type="file" id="file-input" accept="image/png,image/jpeg,image/webp,image/bmp" multiple hidden />
+        <div class="upload-hint">
+          <div class="upload-icon">📁</div>
+          <p>点击选择或拖拽战报截图到此处</p>
+          <p class="sub">支持 PNG / JPG / WebP，可一次上传多张</p>
+        </div>
+      </section>
+
+      <!-- 状态 -->
+      <div id="status" class="status hidden"></div>
+
+      <!-- 识别进度条 -->
+      <div id="progress" class="progress hidden">
+        <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+        <div id="progress-text" class="progress-text">0 / 0</div>
+      </div>
+
+      <!-- 识别结果 -->
+      <section id="results" class="results hidden"></section>
+    </section>
+
+    <!-- 分析页 -->
+    <section id="tab-analyze" class="tab-panel hidden">
+      <div class="analyze-toolbar">
+        <div class="filter-group">
+          <span class="filter-label">同盟</span>
+          <div id="filter-alliance" class="chips"></div>
+        </div>
+        <label>时间：
+          <select id="filter-hours">
+            <option value="0">全部</option>
+            <option value="48">近 48 小时</option>
+            <option value="24">近 24 小时</option>
+            <option value="12">近 12 小时</option>
+            <option value="6">近 6 小时</option>
+            <option value="3">近 3 小时</option>
+          </select>
+        </label>
+        <label class="switch-label">
+          <input type="checkbox" id="toggle-color" checked />
+          颜色显示
+        </label>
+        <button id="btn-refresh" class="btn">刷新统计</button>
+        <button id="btn-clear" class="btn btn-danger">清空记录</button>
+      </div>
+      <nav class="sub-tabs">
+        <button type="button" class="sub-tab active" data-view="rank">🏆 阵容胜率排行</button>
+        <button type="button" class="sub-tab" data-view="matrix">🔥 对战热力图</button>
+      </nav>
+      <div id="analyze-result" class="analyze-result"></div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

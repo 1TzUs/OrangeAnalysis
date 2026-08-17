@@ -1,0 +1,21 @@
+# Node.js 依赖
+node_modules/
+server/node_modules/
+
+# 构建/打包产物
+build/
+
+# TypeScript 编译输出
+server/dist/
+
+# 测试与调试数据
+server/tmp/
+
+# 运行时生成数据
+server/data/
+
+# 打包压缩文件
+*.zip
+
+# 日志
+*.log
