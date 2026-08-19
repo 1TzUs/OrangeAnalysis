@@ -47,7 +47,8 @@ function filterRecords(alliance: string, hours: number): BattleRecord[] {
   const now = Date.now();
   return loadRecords().filter((r) => {
     if (alliance && r.alliance !== alliance) return false;
-    if (hours > 0 && now - r.ts > hours * 3600 * 1000) return false;
+    // 未识别战报时间（ts 为 null）的记录无法判定是否在时间范围内，按范围外处理
+    if (hours > 0 && (r.ts == null || now - r.ts > hours * 3600 * 1000)) return false;
     return true;
   });
 }

@@ -28,6 +28,8 @@ export interface Battle {
   rightGenerals: General[];
   leftAlliance: string;
   rightAlliance: string;
+  /** 战报时间（如 "2026/08/05 16:17:24"），未识别为空串 */
+  time: string;
   result: 'win' | 'lose' | 'unknown';
   resultText: string;
   leftHp: string;
@@ -45,12 +47,26 @@ export interface ParseResult {
 /** 结果字（胜/败/平）——作为战斗锚点 */
 export const RESULT_CHARS = new Set(['胜', '败', '平']);
 
+/**
+ * 战报时间模式：形如 "2026/08/05 16:17:24" 或 "2026-08-05 16:17:24"。
+ * OCR 可能漏掉日期与时间间的空格（如竖屏 "2026/08/1509:30:08"），故分隔符用 \s*。
+ */
+export const TIME_PAT = /\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}\s*\d{1,2}:\d{2}(?::\d{2})?/;
+
+/** 从一行文本中提取战报时间字符串；无则返回空串 */
+export function extractTime(text: string): string {
+  const m = text.match(TIME_PAT);
+  if (!m) return '';
+  // OCR 可能漏掉日期与时间间的空格（如 "2026/08/1510:01:37"），统一补齐为单空格
+  return m[0].replace(/^(\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})\s*(\d{1,2}:\d{2}(?::\d{2})?)$/, '$1 $2');
+}
+
 /** 单字徽标（盟/面/明等装饰字），应忽略 */
 const BADGE_CHARS = new Set(['盟', '面', '明', '攻', '防', '三']);
 
 /**
  * 顶部 UI 导航/筛选词：战报界面固定存在的页签/筛选按钮文字，
- * 绝不可能作为玩家名或同盟名。若它们出现在战斗顶部区域，说明
+ * 绝不可能作为同盟名。若它们出现在战斗顶部区域，说明
  * 该战斗是从列表中间截取的（同盟名被截到图外），属非完整战斗。
  */
 const UI_NAV_WORDS = new Set([
@@ -61,7 +77,7 @@ const UI_NAV_WORDS = new Set([
 
 /**
  * 判断一场战斗顶部是否为非完整（顶部被 UI 导航栏截断/占位）。
- * 完整战斗结果字上方应有玩家名/同盟名；若结果字上方只有成排的 UI
+ * 完整战斗结果字上方应有同盟名；若结果字上方只有成排的 UI
  * 导航词（无任何战斗内容行），说明该战斗从列表中间截取、同盟名被截到图外。
  * 注意：UI 导航可能位于完整第一场的上方，因此必须同时满足
  * 「成排 UI 词」且「无战斗内容行」才判定不完整，避免误删完整第一场。
@@ -72,7 +88,7 @@ function isTopTruncated(allLines: OcrLine[], range: { y0: number }, anchor: OcrL
   const uiHits = band.filter((l) => UI_NAV_WORDS.has(l.text.trim()));
   // 无成排 UI 导航词 => 顶部正常，非截断
   if (uiHits.length < 2) return false;
-  // 有 UI 导航，再检查是否仍含战斗内容行（玩家名/同盟名）
+  // 有 UI 导航，再检查是否仍含战斗内容行（同盟名）
   const hasContent = band.some((l) => {
     const t = l.text.trim();
     if (UI_NAV_WORDS.has(t)) return false;
@@ -97,7 +113,7 @@ export function isFooterText(text: string): boolean {
   const t = text.trim();
   if (t.includes('进攻') || t.includes('防守')) return true;
   if (/\(\d+\s*,\s*\d+\)/.test(t)) return true; // 坐标如 (194,1463)
-  if (/\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}\s*\d{1,2}:\d{2}/.test(t)) return true; // 时间（日期与时间可能无空格）
+  if (TIME_PAT.test(t)) return true; // 时间（日期与时间可能无空格）
   return false;
 }
 
@@ -179,6 +195,7 @@ export async function parseBattleImage(imagePath: string): Promise<ParseResult> 
       rightGenerals: [],
       leftAlliance: '',
       rightAlliance: '',
+      time: '',
       result: 'unknown',
       resultText: '',
       leftHp: '',
@@ -200,21 +217,20 @@ export async function parseBattleImage(imagePath: string): Promise<ParseResult> 
     const genTop = anchor ? Math.max(0, anchor.y1 - 15) : range.y0;
 
     // ---- 同盟名：战斗顶部区域（range.y0 ~ 武将带顶）----
-    // 该区域含玩家名行与下方的同盟名行，由 extractAlliances 依据
-    // "盟"徽标区分玩家名与同盟名（同盟名行旁通常带独立"盟"徽标）。
+    // 由 extractTopInfo 依据"盟"徽标定位同盟名行（同盟名行旁通常带独立"盟"徽标）。
     const allianceBand = allLines.filter((l) => l.y0 >= range.y0 && l.y0 < genTop);
-    const { left: leftAlli, right: rightAlli } = extractAlliances(allianceBand, cx);
+    const alliLines = extractTopInfo(allianceBand, cx);
     // 同盟名：整图 OCR 通常已准确；仅在末尾含疑似粘连噪声字（如"剑来画"的"画"）
     // 时才对同盟行区域做高倍 OCR 还原，避免对高分辨率图造成丢字回归。
-    battle.leftAlliance = leftAlli
-      ? needAllianceRefine(leftAlli.text)
-        ? await refineAlliance(imagePath, leftAlli)
-        : cleanAlliance(leftAlli.text)
+    battle.leftAlliance = alliLines.left
+      ? needAllianceRefine(alliLines.left.text)
+        ? await refineAlliance(imagePath, alliLines.left)
+        : cleanAlliance(alliLines.left.text)
       : '';
-    battle.rightAlliance = rightAlli
-      ? needAllianceRefine(rightAlli.text)
-        ? await refineAlliance(imagePath, rightAlli)
-        : cleanAlliance(rightAlli.text)
+    battle.rightAlliance = alliLines.right
+      ? needAllianceRefine(alliLines.right.text)
+        ? await refineAlliance(imagePath, alliLines.right)
+        : cleanAlliance(alliLines.right.text)
       : '';
 
     const genBot = Math.min(H, genTop + 80);
@@ -229,6 +245,16 @@ export async function parseBattleImage(imagePath: string): Promise<ParseResult> 
       await fillRed(imagePath, battle);
     }
 
+    // ---- 战报时间：位于战斗面板顶部（右上角，与"空地坐标/进攻/防守第X场"同行），
+    // 即结果字【上方】区域。区间取本场顶部边界（上一场与当前结果字中点附近）到结果字上方，
+    // 从中挑离结果字最近的一条时间行（同一行右上角）；未识别则保持空串。
+    const timeLo = Math.max(0, range.y0 - 8);
+    const timeLine = allLines
+      .filter((l) => l.y0 >= timeLo && l.y0 < genTop)
+      .filter((l) => TIME_PAT.test(l.text))
+      .sort((a, b) => b.y0 - a.y0)[0];
+    if (timeLine) battle.time = extractTime(timeLine.text);
+
     battles.push(battle);
   }
 
@@ -242,11 +268,14 @@ function isAllianceBadge(line: OcrLine): boolean {
 
 /**
  * 从顶部条带提取左右同盟名所在行。
- * 同盟名行旁通常带独立"盟"徽标，玩家名行没有；
+ * 同盟名行旁通常带独立"盟"徽标；
  * 因此优先取与"盟"徽标 y 重叠/紧邻的行作为同盟名，缺失时回退到最下方一行。
  * @returns 每侧同盟名对应的文本行（含 bbox），未命中为 null
  */
-function extractAlliances(lines: OcrLine[], cx: number): { left: OcrLine | null; right: OcrLine | null } {
+function extractTopInfo(lines: OcrLine[], cx: number): {
+  left: OcrLine | null;
+  right: OcrLine | null;
+} {
   const badgeLines = lines.filter(isAllianceBadge);
   const candLines = lines.filter((l) => {
     const t = l.text.trim();
@@ -260,7 +289,7 @@ function extractAlliances(lines: OcrLine[], cx: number): { left: OcrLine | null;
   const sideOf = (l: OcrLine): 'left' | 'right' | null =>
     l.x1 <= cx ? 'left' : l.x0 >= cx ? 'right' : null;
 
-  const pick = (side: 'left' | 'right'): OcrLine | null => {
+  const pickAlliance = (side: 'left' | 'right'): OcrLine | null => {
     const badges = badgeLines.filter((b) => sideOf(b) === side);
     const cands = candLines.filter((l) => sideOf(l) === side);
     if (!cands.length) return null;
@@ -271,11 +300,11 @@ function extractAlliances(lines: OcrLine[], cx: number): { left: OcrLine | null;
       );
       if (hit) return hit;
     }
-    // 回退：取最下方一行（同盟名通常位于玩家名下方）
+    // 回退：取最下方一行（同盟名通常位于区域最下方）
     return [...cands].sort((a, b) => b.y0 - a.y0)[0];
   };
 
-  return { left: pick('left'), right: pick('right') };
+  return { left: pickAlliance('left'), right: pickAlliance('right') };
 }
 
 /**

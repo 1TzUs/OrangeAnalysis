@@ -2,7 +2,7 @@
  * 竖屏战报识别模块：适配 PE 端竖屏截图（1080x2376 单列纵向面板）。
  *
  * 与 PC 横屏的关键差异：结果字「胜/败」位于每个战斗面板的【顶部/偏上】，
- * 向下依次为 武将带 → 玩家名 → 同盟名 → 兵力。因此同盟名需在武将带【下方】查找，
+ * 向下依次为 武将带 → 同盟名 → 兵力。因此同盟名需在武将带【下方】查找，
  * 并借助兵力（x/y 形式）行锚定，避免误吸底部导航栏（全部/返回/同盟等）。
  */
 import sharp from 'sharp';
@@ -11,6 +11,8 @@ import {
   Battle,
   ParseResult,
   cleanAlliance,
+  extractTime,
+  TIME_PAT,
   isFooterText,
   isNoiseLine,
   RESULT_CHARS,
@@ -52,8 +54,8 @@ function needPortraitRefine(raw: string): boolean {
 
 /**
  * 取列表中最顶部的一行文本簇。
- * 竖屏的武将带里，武将名行位于最上，其下是玩家名行；
- * 仅保留武将行，避免玩家名（经模糊匹配可能命中的武将）混入。
+ * 竖屏的武将带里，武将名行位于最上，其下是同盟名/兵力等行；
+ * 仅保留顶部武将行，避免下方行（经模糊匹配可能命中的武将）混入。
  */
 function topRowCluster(lines: OcrLine[]): OcrLine[] {
   const meaningful = lines.filter((l) => !isNoiseLine(l));
@@ -79,12 +81,14 @@ export async function parsePortraitImage(imagePath: string): Promise<ParseResult
   const anchors = allLines.filter(isPortraitResultGlyph).sort((a, b) => a.y0 - b.y0);
 
   const battles: Battle[] = [];
-  for (const anchor of anchors) {
+  for (let i = 0; i < anchors.length; i++) {
+    const anchor = anchors[i];
     const battle: Battle = {
       leftGenerals: [],
       rightGenerals: [],
       leftAlliance: '',
       rightAlliance: '',
+      time: '',
       result: 'unknown',
       resultText: anchor.text.trim(),
       leftHp: '',
@@ -93,6 +97,15 @@ export async function parsePortraitImage(imagePath: string): Promise<ParseResult
       panel: { y0: anchor.y0, y1: H },
     };
     battle.result = battle.resultText === '胜' ? 'win' : battle.resultText === '败' ? 'lose' : 'unknown';
+
+    // ---- 战报时间：位于结果字上方（坐标/战斗场次所在 footer 区域）----
+    // 取上一场结果字底边到本场结果字顶边之间、离结果字最近的一条时间行。
+    const timeLo = i === 0 ? 0 : anchors[i - 1].y1;
+    const timeLine = allLines
+      .filter((l) => l.y0 >= timeLo && l.y0 < anchor.y0)
+      .filter((l) => TIME_PAT.test(l.text))
+      .sort((a, b) => b.y0 - a.y0)[0];
+    if (timeLine) battle.time = extractTime(timeLine.text);
 
     // ---- 武将带：结果字下方约 80px 区域 ----
     const genTop = Math.max(0, anchor.y1 - 15);
@@ -103,14 +116,15 @@ export async function parsePortraitImage(imagePath: string): Promise<ParseResult
         { x0: 0, y0: genTop, x1: W, y1: genBot },
         2
       );
-      // 只取最顶部一行文本簇作为武将行，避免下方玩家名（可能模糊匹配到武将）混入
+      // 只取最顶部一行文本簇作为武将行，避免下方同盟名等行（可能模糊匹配到武将）混入
       classifyGeneralBand(topRowCluster(bandLines), cx, battle);
       // 识别每个武将上方的勾玉数量（红度）
       await fillRed(imagePath, battle);
     }
 
-    // ---- 同盟名 + 兵力：武将带下方（玩家名 → 同盟名 → 兵力 依次向下）----
-    const alStart = genBot;
+    // ---- 同盟名 + 兵力：武将带下方（同盟名 → 兵力 依次向下）----
+    // 区间从武将带顶开始，覆盖紧贴武将带下方的同盟名行。
+    const alStart = genTop;
     const alEnd = Math.min(H, genTop + 350);
     const zoneLines = await ocrRegionService(
       imagePath,
@@ -137,25 +151,24 @@ export async function parsePortraitImage(imagePath: string): Promise<ParseResult
       return true;
     });
 
-    const pickAlliance = async (side: 'left' | 'right'): Promise<string> => {
+    // 提取单侧同盟名：同盟名 = 兵力行上方最近的候选行。
+    const pickSide = async (side: 'left' | 'right'): Promise<string> => {
       const sideCands = cands.filter((l) => sideOf(l) === side);
       if (!sideCands.length) return '';
-      let hit: OcrLine;
       const hp = hpOf(side);
-      if (hp) {
-        // 同盟名 = 兵力行上方最近的候选行（玩家名在其上方）
-        const above = sideCands.filter((c) => c.y0 < hp.y0);
-        hit = (above.length ? above : sideCands).sort((a, b) => b.y0 - a.y0)[0];
-      } else {
-        hit = sideCands.sort((a, b) => b.y0 - a.y0)[0];
-      }
-      const raw = cleanAlliance(hit.text);
+      const alliHit = hp
+        ? (sideCands.filter((c) => c.y0 < hp.y0).length
+            ? sideCands.filter((c) => c.y0 < hp.y0)
+            : sideCands
+          ).sort((a, b) => b.y0 - a.y0)[0]
+        : [...sideCands].sort((a, b) => b.y0 - a.y0)[0];
+      const raw = cleanAlliance(alliHit.text);
       // 末尾含噪声字时对该区域高倍精修还原
-      return raw && needPortraitRefine(raw) ? await refineAlliance(imagePath, hit) : raw;
+      return raw && needPortraitRefine(raw) ? await refineAlliance(imagePath, alliHit) : raw;
     };
 
-    battle.leftAlliance = await pickAlliance('left');
-    battle.rightAlliance = await pickAlliance('right');
+    battle.leftAlliance = await pickSide('left');
+    battle.rightAlliance = await pickSide('right');
 
     const lhp = hpOf('left');
     const rhp = hpOf('right');

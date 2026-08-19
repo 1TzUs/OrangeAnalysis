@@ -30,7 +30,9 @@ export interface BattleRecord {
   alliance: string;    // 该方所属同盟
   result: 'win' | 'lose';
   stars: number;       // 阵容总红度（0-15），未知时为 -1
-  ts: number;          // 记录时间戳
+  ts: number | null;   // 战报时间戳（解析自战报上的时间），未识别为 null
+  battleTime: string;  // 战报原始时间字符串（如 "2026/08/05 16:17:24"），未识别为空串
+  hp: string;          // 该方兵力（"剩余/战前"，如 "25000/30000"），未识别为空串
   image: string;       // 来源截图文件名
 }
 
@@ -44,19 +46,43 @@ export function loadRecords(): BattleRecord[] {
       cache = [];
       return cache;
     }
-    cache = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8')) as BattleRecord[];
+    // 兼容旧数据：补齐缺失的新增字段（battleTime/hp 默认空串，ts 非数字视为 null）
+    cache = (JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8')) as BattleRecord[]).map((r) => ({
+      comp: r.comp,
+      alliance: r.alliance,
+      result: r.result,
+      stars: r.stars,
+      ts: typeof r.ts === 'number' ? r.ts : null,
+      battleTime: r.battleTime ?? '',
+      hp: r.hp ?? '',
+      image: r.image,
+    }));
   } catch {
     cache = [];
   }
   return cache;
 }
 
-/** 追加写入记录并立即落盘 */
+/** 去重键：同盟 + 阵容 + 红度 + 兵力 + 战报时间，全部相同视为重复战报 */
+function recordKey(r: BattleRecord): string {
+  return `${r.alliance}|${r.comp}|${r.stars}|${r.hp}|${r.battleTime}`;
+}
+
+/** 追加写入记录并立即落盘（自动去重） */
 export function appendRecords(records: BattleRecord[]): void {
   if (!records.length) return;
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const all = loadRecords();
-  all.push(...records);
+  const seen = new Set(all.map(recordKey));
+  const added: BattleRecord[] = [];
+  for (const r of records) {
+    const key = recordKey(r);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    added.push(r);
+  }
+  if (!added.length) return;
+  all.push(...added);
   cache = all;
   fs.writeFileSync(DATA_FILE, JSON.stringify(all, null, 2), 'utf-8');
 }
@@ -78,16 +104,17 @@ export function compOf(generals: General[]): string {
 
 /**
  * 将一张图的解析结果拆成多条战斗记录（左、右各一条）。
+ * 持久化的时间取战报上的时间（battle.time），而非上传/识别时间；未识别则 ts=null、battleTime 为空串。
  * @param battles 解析出的战斗列表
  * @param imageName 来源截图文件名
  */
 export function battleToRecords(battles: Battle[], imageName: string): BattleRecord[] {
-  const ts = Date.now();
   const records: BattleRecord[] = [];
   for (const b of battles) {
     if (!b.leftAlliance || !b.rightAlliance) continue;
     // 任一侧识别出的武将不足 3 个则整场剔除（本文档按 3 武将阵容统计）
     if (b.leftGenerals.length < 3 || b.rightGenerals.length < 3) continue;
+    const ts = parseBattleTime(b.time);
     // 阵容总红度 = 各武将红度之和（武将红度未知(-1)则该阵容红度按 -1 处理）
     const leftStars = sumRed(b.leftGenerals);
     const rightStars = sumRed(b.rightGenerals);
@@ -98,6 +125,8 @@ export function battleToRecords(battles: Battle[], imageName: string): BattleRec
       result: b.result === 'win' ? 'win' : 'lose',
       stars: leftStars,
       ts,
+      battleTime: b.time,
+      hp: b.leftHp,
       image: imageName,
     });
     // 右方视角
@@ -107,10 +136,22 @@ export function battleToRecords(battles: Battle[], imageName: string): BattleRec
       result: b.result === 'win' ? 'lose' : 'win',
       stars: rightStars,
       ts,
+      battleTime: b.time,
+      hp: b.rightHp,
       image: imageName,
     });
   }
   return records;
+}
+
+/**
+ * 解析战报时间字符串为时间戳；无法解析返回 null。
+ * 兼容 "2026/08/05 16:17:24" 与 "2026-08-05 16:17:24"（斜杠统一替换为短横线）。
+ */
+function parseBattleTime(t: string): number | null {
+  if (!t) return null;
+  const ts = Date.parse(t.replace(/\//g, '-'));
+  return Number.isNaN(ts) ? null : ts;
 }
 
 /** 阵容红度：各武将红度之和；含未知(-1)则为 -1 */

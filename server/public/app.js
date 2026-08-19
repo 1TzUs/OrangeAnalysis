@@ -123,17 +123,24 @@
     const div = document.createElement('div');
     div.className = 'battle-card ' + (b.result === 'win' ? 'win' : b.result === 'lose' ? 'lose' : '');
 
-    // 顶部：同盟 + 结果
+    // 顶部：同盟 + 时间 + 结果
     const top = document.createElement('div');
     top.className = 'battle-top';
     const resultText = b.resultText || (b.result === 'win' ? '胜' : b.result === 'lose' ? '败' : '?');
     top.innerHTML = `
       <div class="alliance-row">
-        <span class="alliance-badge">${b.leftAlliance || '未知'}</span>
-        <span style="color:var(--text-dim)">VS</span>
-        <span class="alliance-badge">${b.rightAlliance || '未知'}</span>
+        <div class="alliance-side">
+          <span class="alliance-badge">${b.leftAlliance || '未知'}</span>
+        </div>
+        <span class="vs-sep">VS</span>
+        <div class="alliance-side">
+          <span class="alliance-badge">${b.rightAlliance || '未知'}</span>
+        </div>
       </div>
-      <div class="result-badge ${b.result}">${resultText}</div>`;
+      <div class="result-block">
+        ${b.time ? `<div class="battle-time" title="战报时间">⏱ ${b.time}</div>` : ''}
+        <div class="result-badge ${b.result}">${resultText}</div>
+      </div>`;
 
     // 主体：武将 + 兵力
     const body = document.createElement('div');
@@ -141,7 +148,7 @@
     body.innerHTML = `
       <div class="side left">
         ${renderGenerals(b.leftGenerals)}
-        <div class="hp">${b.leftHp ? '兵力 ' + b.leftHp : ''}</div>
+        ${formatHp(b.leftHp)}
       </div>
       <div class="vs">
         <span>第 ${i + 1} 战</span>
@@ -149,12 +156,23 @@
       </div>
       <div class="side right">
         ${renderGenerals(b.rightGenerals)}
-        <div class="hp">${b.rightHp ? '兵力 ' + b.rightHp : ''}</div>
+        ${formatHp(b.rightHp)}
       </div>`;
 
     div.appendChild(top);
     div.appendChild(body);
     return div;
+  }
+
+  /** 兵力展示：形如 "25000/30000"（剩余/战前）→ "兵力 剩余25000 / 战前30000" */
+  function formatHp(hp) {
+    if (!hp) return '';
+    const parts = String(hp).split('/').map((s) => s.trim());
+    const html =
+      parts.length === 2 && parts[0] && parts[1]
+        ? `兵力 剩余${parts[0]} / 战前${parts[1]}`
+        : `兵力 ${hp}`;
+    return `<div class="hp" title="剩余兵力 / 战前兵力">${html}</div>`;
   }
 
   /** 渲染武将名列表 */

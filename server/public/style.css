@@ -203,6 +203,23 @@ body {
   gap: 12px;
   font-weight: 600;
 }
+.alliance-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+.vs-sep { color: var(--text-dim); }
+.result-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.battle-time {
+  font-size: 12px;
+  color: var(--text-dim);
+}
 .alliance-badge {
   display: inline-flex;
   align-items: center;
