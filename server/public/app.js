@@ -483,21 +483,23 @@
       .join('');
   }
 
-  /** 阵容标识徽标（快速升温 / 白板之光 / 泥头车），悬停显示判定说明；可在设置页独立开关显示 */
+  /** 阵容标识徽标（快速升温 / 白板之光 / 泥头车 / 陷阱），悬停显示判定说明；可在设置页独立开关显示 */
   function rankBadges(c) {
     const s = loadSettings();
+    // 数值门槛取值：显式填 0（不限）时原样展示，仅空串/缺失时才回落默认值
+    const num = (v, def) => (v === undefined || v === '') ? def : v;
     let h = '';
     if (c.hot && s.hotShow !== '0') {
-      h += `<span class="hot-badge"><span class="flame">🔥</span>快速升温<span class="hot-tip">近 ${s.hotHours || 3} 小时新出现、至少 ${s.hotMin || 5} 场，占比 ≥ ${s.hotRate || 10}%</span></span>`;
+      h += `<span class="hot-badge"><span class="flame">🔥</span>快速升温<span class="hot-tip">近 ${num(s.hotHours, 3)} 小时新出现、至少 ${num(s.hotMin, 5)} 场，占比 ≥ ${num(s.hotRate, 10)}%</span></span>`;
     }
     if (c.whiteBoard && s.wbShow !== '0') {
-      h += `<span class="wb-badge">🔆 白板之光<span class="hot-tip">「0-5红」低红段内场次 ≥${s.wbMin || 5} 且该段胜率 ≥${s.wbRate || 51}%</span></span>`;
+      h += `<span class="wb-badge">🔆 白板之光<span class="hot-tip">「0-5红」低红段内场次 ≥${num(s.wbMin, 5)} 且该段胜率 ≥${num(s.wbRate, 51)}%</span></span>`;
     }
     if (c.truck && s.truckShow !== '0') {
-      h += `<span class="truck-badge">🚚 泥头车<span class="hot-tip">胜率 ≥${s.truckRate || 60}%</span></span>`;
+      h += `<span class="truck-badge">🚚 泥头车<span class="hot-tip">胜率 &gt;${num(s.truckRate, 60)}%</span></span>`;
     }
     if (c.trap && s.trapShow !== '0') {
-      h += `<span class="trap-badge">⚠️ 陷阱<span class="hot-tip">场次 ≥${s.trapMin || 20} 且胜率 &lt;50%，谨慎使用</span></span>`;
+      h += `<span class="trap-badge">⚠️ 陷阱<span class="hot-tip">场次 ≥${num(s.trapMin, 20)} 且胜率 &lt;50%，谨慎使用</span></span>`;
     }
     return h;
   }
