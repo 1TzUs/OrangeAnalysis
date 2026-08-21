@@ -23,21 +23,50 @@ function isMagColor(r: number, g: number, b: number): boolean {
   return r > 170 && g > 95 && g < 165 && b < 100 && r - g > 50 && r - b > 90;
 }
 
-/** 在给定区域内做橙红色连通域，返回所有块 */
+/** 解码后的整图原始像素（用于在内存中按子区域采样，避免逐武将重复解码整图） */
+interface RawImage {
+  data: Buffer;
+  width: number;
+  height: number;
+  channels: number;
+}
+
+// 原始像素缓存：一次解析中同一张图会被多个武将反复取色，
+// 原实现对每个武将都重新 sharp().toBuffer() 解码整张图，极其耗时。
+// 这里缓存解码后的原始像素，同一图内直接内存切片，像素完全一致，精度零影响。
+const RAW_CACHE = new Map<string, RawImage>();
+const RAW_CACHE_MAX = 2;
+
+async function getRaw(imagePath: string): Promise<RawImage | null> {
+  const cached = RAW_CACHE.get(imagePath);
+  if (cached) return cached;
+  const { data, info } = await sharp(imagePath).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const raw: RawImage = { data, width: info.width, height: info.height, channels: info.channels || 3 };
+  if (RAW_CACHE.size >= RAW_CACHE_MAX) {
+    const first = RAW_CACHE.keys().next().value;
+    if (first !== undefined) RAW_CACHE.delete(first);
+  }
+  RAW_CACHE.set(imagePath, raw);
+  return raw;
+}
+
+/** 在给定区域内做橙红色连通域，返回所有块（从整图原始像素中内存切片，不再重复解码） */
 async function collectBlocks(imagePath: string, x0: number, y0: number, x1: number, y1: number): Promise<Block[]> {
-  const { data, info } = await sharp(imagePath)
-    .extract({ left: x0, top: y0, width: x1 - x0, height: y1 - y0 })
-    .removeAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-  const W = info.width;
-  const H = info.height;
+  const raw = await getRaw(imagePath);
+  if (!raw) return [];
+  const { data, channels } = raw;
+  const W = x1 - x0;
+  const H = y1 - y0;
   const visited = new Uint8Array(W * H);
   const out: Block[] = [];
+  // 子区域在整图原始缓冲区中的首行偏移
+  const base = (y0 * raw.width + x0) * channels;
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const i = y * W + x;
-      if (visited[i] || !isMagColor(data[i * 3], data[i * 3 + 1], data[i * 3 + 2])) continue;
+      if (visited[i]) continue;
+      const off = base + (y * raw.width + x) * channels;
+      if (!isMagColor(data[off], data[off + 1], data[off + 2])) continue;
       const stack: Array<[number, number]> = [[x, y]];
       visited[i] = 1;
       let minX = x, maxX = x, area = 0;
@@ -49,7 +78,10 @@ async function collectBlocks(imagePath: string, x0: number, y0: number, x1: numb
         for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
           const nx = cx + dx, ny = cy + dy;
           if (nx < 0 || ny < 0 || nx >= W || ny >= H || visited[ny * W + nx]) continue;
-          if (isMagColor(data[(ny * W + nx) * 3], data[(ny * W + nx) * 3 + 1], data[(ny * W + nx) * 3 + 2])) {
+          // 邻居像素绝对偏移：base 已含子区域左上角 (y0,x0) 的偏移，
+          // 只叠加相对坐标 (ny,nx)*raw.width，绝不能再加 y0/x0，否则越界读错。
+          const off2 = base + (ny * raw.width + nx) * channels;
+          if (isMagColor(data[off2], data[off2 + 1], data[off2 + 2])) {
             visited[ny * W + nx] = 1;
             stack.push([nx, ny]);
           }

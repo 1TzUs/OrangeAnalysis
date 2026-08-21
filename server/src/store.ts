@@ -27,12 +27,14 @@ const DATA_FILE = path.join(DATA_DIR, 'records.json');
 /** 单条战斗记录（从某一方视角） */
 export interface BattleRecord {
   comp: string;        // 阵容：三个武将名拼接，如 "周瑜/诸葛亮/诸葛瑾"
+  compReds: number[];  // 逐武将红度，顺序与 comp 中武将一致（0-5，未知 -1），旧数据缺失为空数组
   alliance: string;    // 该方所属同盟
   result: 'win' | 'lose';
   stars: number;       // 阵容总红度（0-15），未知时为 -1
   ts: number | null;   // 战报时间戳（解析自战报上的时间），未识别为 null
   battleTime: string;  // 战报原始时间字符串（如 "2026/08/05 16:17:24"），未识别为空串
-  hp: string;          // 该方兵力（"剩余/战前"，如 "25000/30000"），未识别为空串
+  hpAfter: string;     // 战后剩余兵力，如 "25000"，未识别为空串
+  hpBefore: string;    // 战前兵力，如 "30000"，未识别为空串
   image: string;       // 来源截图文件名
 }
 
@@ -46,26 +48,33 @@ export function loadRecords(): BattleRecord[] {
       cache = [];
       return cache;
     }
-    // 兼容旧数据：补齐缺失的新增字段（battleTime/hp 默认空串，ts 非数字视为 null）
-    cache = (JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8')) as BattleRecord[]).map((r) => ({
-      comp: r.comp,
-      alliance: r.alliance,
-      result: r.result,
-      stars: r.stars,
-      ts: typeof r.ts === 'number' ? r.ts : null,
-      battleTime: r.battleTime ?? '',
-      hp: r.hp ?? '',
-      image: r.image,
-    }));
+    // 兼容旧数据：补齐缺失的新增字段（battleTime 默认空串，hp 旧格式 "剩余/战前" 拆分为 hpAfter/hpBefore，ts 非数字视为 null）
+    const raw = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8')) as (BattleRecord & { hp?: string })[];
+    cache = raw.map((r) => {
+      const hp = splitHp(r.hp ?? '');
+      return {
+        comp: r.comp,
+        // 旧数据无 compReds：按空数组处理（无法反推逐武将红度），分析/展示会退化为不显示
+        compReds: Array.isArray(r.compReds) ? r.compReds : [],
+        alliance: r.alliance,
+        result: r.result,
+        stars: r.stars,
+        ts: typeof r.ts === 'number' ? r.ts : null,
+        battleTime: r.battleTime ?? '',
+        hpAfter: r.hpAfter ?? hp.after,
+        hpBefore: r.hpBefore ?? hp.before,
+        image: r.image,
+      };
+    });
   } catch {
     cache = [];
   }
   return cache;
 }
 
-/** 去重键：同盟 + 阵容 + 红度 + 兵力 + 战报时间，全部相同视为重复战报 */
+/** 去重键：同盟 + 阵容 + 逐武将红度 + 兵力(战前/战后) + 战报时间，全部相同视为重复战报 */
 function recordKey(r: BattleRecord): string {
-  return `${r.alliance}|${r.comp}|${r.stars}|${r.hp}|${r.battleTime}`;
+  return `${r.alliance}|${r.comp}|${r.compReds.join(',')}|${r.hpAfter}|${r.hpBefore}|${r.battleTime}`;
 }
 
 /** 追加写入记录并立即落盘（自动去重） */
@@ -94,12 +103,15 @@ export function clearRecords(): void {
   fs.writeFileSync(DATA_FILE, JSON.stringify([], null, 2), 'utf-8');
 }
 
-/** 将武将列表规范化为阵容 key（排序去重，保证顺序无关） */
-export function compOf(generals: General[]): string {
-  return generals
-    .map((g) => g.name)
-    .sort()
-    .join('/');
+/** 将武将列表规范化为阵容 key 及逐武将红度（排序去重，保证顺序无关，红度顺序与 key 一致） */
+export function compOf(generals: General[]): { comp: string; compReds: number[] } {
+  const sorted = generals
+    .map((g) => ({ name: g.name, red: g.red }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return {
+    comp: sorted.map((s) => s.name).join('/'),
+    compReds: sorted.map((s) => s.red),
+  };
 }
 
 /**
@@ -118,30 +130,49 @@ export function battleToRecords(battles: Battle[], imageName: string): BattleRec
     // 阵容总红度 = 各武将红度之和（武将红度未知(-1)则该阵容红度按 -1 处理）
     const leftStars = sumRed(b.leftGenerals);
     const rightStars = sumRed(b.rightGenerals);
+    // 左方兵力：原始 "剩余/战前" 拆分为战后剩余 hpAfter、战前 hpBefore
+    const leftHp = splitHp(b.leftHp);
+    const rightHp = splitHp(b.rightHp);
+    // 左方阵容 key 与逐武将红度
+    const leftComp = compOf(b.leftGenerals);
+    const rightComp = compOf(b.rightGenerals);
     // 左方视角
     records.push({
-      comp: compOf(b.leftGenerals),
+      comp: leftComp.comp,
+      compReds: leftComp.compReds,
       alliance: b.leftAlliance,
       result: b.result === 'win' ? 'win' : 'lose',
       stars: leftStars,
       ts,
       battleTime: b.time,
-      hp: b.leftHp,
+      hpAfter: leftHp.after,
+      hpBefore: leftHp.before,
       image: imageName,
     });
     // 右方视角
     records.push({
-      comp: compOf(b.rightGenerals),
+      comp: rightComp.comp,
+      compReds: rightComp.compReds,
       alliance: b.rightAlliance,
       result: b.result === 'win' ? 'lose' : 'win',
       stars: rightStars,
       ts,
       battleTime: b.time,
-      hp: b.rightHp,
+      hpAfter: rightHp.after,
+      hpBefore: rightHp.before,
       image: imageName,
     });
   }
   return records;
+}
+
+/** 拆分兵力字符串 "剩余/战前"（如 "25000/30000"）为战后剩余 hpAfter 与战前 hpBefore；无法解析则两者均为空串 */
+function splitHp(hp: string): { after: string; before: string } {
+  const parts = (hp ?? '').split('/').map((s) => s.trim());
+  if (parts.length === 2 && parts[0] && parts[1]) {
+    return { after: parts[0], before: parts[1] };
+  }
+  return { after: '', before: '' };
 }
 
 /**

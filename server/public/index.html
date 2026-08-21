@@ -20,6 +20,7 @@
     <nav class="tabs">
       <button class="tab-btn active" data-tab="parse">📷 战报识别</button>
       <button class="tab-btn" data-tab="analyze">📊 数据分析</button>
+      <button class="tab-btn" data-tab="settings">⚙️ 设置</button>
     </nav>
 
     <!-- 识别页 -->
@@ -56,11 +57,12 @@
     <!-- 分析页 -->
     <section id="tab-analyze" class="tab-panel hidden">
       <div class="analyze-toolbar">
-        <div class="filter-group">
+        <div class="filter-group alliance">
           <span class="filter-label">同盟</span>
           <div id="filter-alliance" class="chips"></div>
         </div>
-        <label>时间：
+        <div class="filter-group">
+          <span class="filter-label">时间</span>
           <select id="filter-hours">
             <option value="0">全部</option>
             <option value="48">近 48 小时</option>
@@ -69,13 +71,34 @@
             <option value="6">近 6 小时</option>
             <option value="3">近 3 小时</option>
           </select>
-        </label>
+        </div>
+        <div class="filter-group">
+          <span class="filter-label">兵力</span>
+          <select id="filter-hp">
+            <option value="0">不限</option>
+            <option value="20000">20000 以上</option>
+            <option value="25000">25000 以上</option>
+            <option value="30000">30000 及以上</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <span class="filter-label">场次</span>
+          <select id="filter-count">
+            <option value="0">不限</option>
+            <option value="5">5 场以上</option>
+            <option value="20">20 场以上</option>
+            <option value="50">50 场以上</option>
+            <option value="100">100 场以上</option>
+          </select>
+        </div>
         <label class="switch-label">
           <input type="checkbox" id="toggle-color" checked />
           颜色显示
         </label>
-        <button id="btn-refresh" class="btn">刷新统计</button>
-        <button id="btn-clear" class="btn btn-danger">清空记录</button>
+        <div class="toolbar-actions">
+          <button id="btn-refresh" class="btn">刷新统计</button>
+          <button id="btn-clear" class="btn btn-danger">清空记录</button>
+        </div>
       </div>
       <nav class="sub-tabs">
         <button type="button" class="sub-tab active" data-view="rank">🏆 阵容胜率排行</button>
@@ -83,8 +106,59 @@
       </nav>
       <div id="analyze-result" class="analyze-result"></div>
     </section>
+
+    <!-- 设置页 -->
+    <section id="tab-settings" class="tab-panel hidden">
+      <div class="settings-wrap">
+        <div class="settings-card">
+          <h3 class="settings-title">🎯 有效战报默认口径</h3>
+          <p class="settings-desc">作为数据分析页筛选器的预设默认值，打开分析页时自动选中，之后仍可手动调整</p>
+          <div class="setting-row">
+            <div class="setting-field">
+              <label for="set-count">默认最低场次</label>
+              <input type="number" id="set-count" min="0" max="500" step="1" placeholder="不限填 0" />
+              <div class="setting-hint">0 = 不限场次，可任意手动输入</div>
+            </div>
+            <div class="setting-field">
+              <label for="set-hp">默认最低兵力</label>
+              <input type="number" id="set-hp" min="0" max="33000" step="100" placeholder="范围 0 ~ 33000" />
+              <div class="setting-hint">0 = 不限兵力，上限 33000</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <h3 class="settings-title">🔥 快速升温门槛</h3>
+          <p class="settings-desc">满足「近 N 小时内新出现、至少出场 M 场、占比不低于 R%」的阵容会标记为快速升温</p>
+          <div class="setting-row">
+            <div class="setting-field">
+              <label for="set-hot-hours">时间窗（小时）</label>
+              <input type="number" id="set-hot-hours" min="1" max="24" step="1" />
+            </div>
+            <div class="setting-field">
+              <label for="set-hot-min">最低出场场次</label>
+              <input type="number" id="set-hot-min" min="1" max="50" step="1" />
+            </div>
+            <div class="setting-field">
+              <label for="set-hot-rate">出场占比（%）</label>
+              <input type="number" id="set-hot-rate" min="1" max="100" step="1" />
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-actions">
+          <span id="settings-toast" class="settings-toast"></span>
+          <button id="btn-reset-settings" class="btn btn-ghost">恢复默认</button>
+          <button id="btn-save-settings" class="btn btn-primary">保存设置</button>
+        </div>
+      </div>
+    </section>
   </main>
 
-  <script src="/app.js"></script>
+  <footer class="app-footer">
+    <span>© 2026 欧润吉 All rights reserved</span>
+  </footer>
+
+  <script src="/app.js?v=20260821-1"></script>
 </body>
 </html>

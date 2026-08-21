@@ -18,9 +18,11 @@
 
 body {
   font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
   background: radial-gradient(1200px 600px at 50% -10%, #1a2440 0%, var(--bg) 60%);
   color: var(--text);
-  min-height: 100vh;
 }
 
 .app-header {
@@ -54,7 +56,18 @@ body {
   font-size: 14px;
 }
 
-.container { max-width: 1080px; margin: 24px auto; padding: 0 16px 60px; }
+.container { flex: 1 0 auto; max-width: 1080px; width: 100%; margin: 24px auto; padding: 0 16px 60px; }
+
+/* 页脚版权 */
+.app-footer {
+  padding: 18px 16px 26px;
+  text-align: center;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+}
+.app-footer span { opacity: 0.85; }
 
 /* 上传区 */
 .upload-zone {
@@ -345,13 +358,28 @@ body {
 .analyze-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  row-gap: 12px;
+  column-gap: 16px;
   align-items: center;
   padding: 14px 16px;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 12px;
   margin-bottom: 18px;
+}
+/* 同盟筛选区域弹性伸缩：chips 多时占满可用宽度，其余控件自然换行到下一行 */
+.analyze-toolbar .filter-group.alliance {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* 时间/兵力等定宽筛选组：不参与弹性伸缩 */
+.analyze-toolbar .filter-group:not(.alliance) { flex: 0 0 auto; }
+/* 右侧操作按钮：始终靠右对齐，换行到下一行时也保持右对齐，避免与左侧控件混排 */
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
 }
 .analyze-toolbar label {
   font-size: 14px;
@@ -468,28 +496,121 @@ body {
 }
 
 .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
+/* 排行表容器：隐藏溢出防止 1px 舍入横向滚动条 */
+.rank-table-wrap { overflow: hidden; }
 .rank-table, .matrix-table {
   width: 100%;
   border-collapse: collapse;
   background: var(--card);
   font-size: 14px;
 }
+/* 排行表：固定布局 + 列宽比例分配，表格始终等于容器宽度，任何视口都不出现横向滚动条 */
+.rank-table {
+  table-layout: fixed;
+}
 .rank-table th, .rank-table td {
-  padding: 10px 14px;
+  padding: 8px 6px;
   text-align: center;
   border-bottom: 1px solid var(--border);
 }
+.rank-table th:nth-child(1) { width: 5%; }
+.rank-table th:nth-child(2) { width: 34%; }
+.rank-table th:nth-child(3) { width: 12%; }
+.rank-table th:nth-child(4) { width: 9%; }
+.rank-table th:nth-child(n+5) { width: 8%; }
 .rank-table thead th {
   background: var(--card-2);
   color: var(--text-dim);
   font-weight: 600;
   font-size: 13px;
 }
+.rank-table thead th:nth-child(2) { text-align: left; }
 .rank-table tbody tr:hover { background: rgba(217,164,65,0.05); }
-.rank-table .idx { color: var(--text-dim); }
-.rank-table .comp { text-align: left; }
-.rank-table .win { color: var(--win); }
-.rank-table .lose { color: var(--lose); }
+/* 阵容列：武将 chip 单行，场次信息以徽标显示在阵容下方 */
+.rank-table .comp {
+  text-align: left;
+}
+.rank-table .comp .comp-chips {
+  white-space: nowrap;
+  overflow: hidden;
+}
+/* 表格内 chip 比识别卡更紧凑，避免阵容列过宽 */
+.rank-table .comp .g-chip {
+  padding: 2px 7px;
+  font-size: 12px;
+}
+.rank-table .comp .comp-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+  padding: 1px 9px;
+  border-radius: 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+/* 「快速升温」徽标：橙红渐变胶囊 + 火焰 + 脉动辉光，参考主流 Trending 标识 */
+.hot-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ff9a76, #ff6b4a);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  border: 1px solid rgba(255, 120, 90, 0.4);
+  box-shadow: 0 1px 4px rgba(255, 90, 60, 0.25);
+  white-space: nowrap;
+  cursor: default;
+  transition: transform 0.15s, filter 0.15s;
+}
+.hot-badge:hover { transform: translateY(-1px); filter: brightness(1.05); }
+.hot-badge .flame { font-size: 12px; line-height: 1; filter: drop-shadow(0 0 2px rgba(255, 140, 90, 0.7)); }
+
+/* 悬停解释气泡 */
+.hot-tip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  padding: 5px 11px;
+  border-radius: 8px;
+  background: #1f2530;
+  color: #d6dde8;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  border: 1px solid #313a48;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.16s, transform 0.16s, visibility 0.16s;
+  pointer-events: none;
+  z-index: 5;
+}
+.hot-tip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #1f2530;
+}
+.hot-badge:hover .hot-tip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
 
 /* 红度分档胜率列 */
 .rank-table th.bracket-th {
@@ -505,40 +626,95 @@ body {
 }
 .rank-table td.bracket-col {
   font-size: 13px;
-  min-width: 64px;
+  min-width: 40px;
+  width: 40px;
 }
-.rank-table td.bracket-col .dim { color: var(--text-dim); }
-.rank-table td.bracket-col.good { color: var(--win); background: var(--win-bg); }
-.rank-table td.bracket-col.bad { color: var(--lose); background: var(--lose-bg); }
-.rank-table td.bracket-col.neutral { color: var(--text); }
+.rank-table td.bracket-col.dim { color: var(--text-dim); }
 
-.rate-cell { display: flex; align-items: center; gap: 8px; justify-content: center; }
-.rate-bar {
-  width: 90px;
-  height: 8px;
-  border-radius: 6px;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  overflow: hidden;
+/* 胜率列：圆角渐变徽标 + tabular 数字，紧凑且信息密度高 */
+.rate-cell { display: flex; align-items: center; justify-content: center; }
+.rate-pill {
+  display: inline-block;
+  min-width: 46px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  border: 1px solid transparent;
+  transition: transform 0.15s, filter 0.15s;
 }
-.rate-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+.rate-pill:hover { transform: translateY(-1px); filter: brightness(1.08); }
+
+/* 胜率表头排序按钮：内嵌图标 + 激活态高亮 */
+.sort-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  margin: -2px 0;
   border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+}
+.sort-btn:hover { color: var(--text); background: rgba(217,164,65,0.1); }
+.sort-btn.active { color: var(--accent-2); font-weight: 700; }
+.sort-btn span { font-size: 11px; line-height: 1; }
+
+/* 平均红度徽标：沿用识别卡红度色系 */
+.avg-red {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 8px;
+  background: rgba(200, 106, 42, 0.16);
+  border: 1px solid rgba(200, 106, 42, 0.35);
+  color: #e8a06a;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 榜单前三排名高亮：金/银/铜 */
+.rank-table .idx { color: var(--text-dim); }
+.rank-table .idx.top-1 { color: #ffd76a; font-weight: 700; }
+.rank-table .idx.top-2 { color: #d7e2f0; font-weight: 700; }
+.rank-table .idx.top-3 { color: #d5906a; font-weight: 700; }
+
+/* 排行表窄屏紧凑排版：压缩间距字号、阵容列允许换行，确保无横向滚动且内容完整可读 */
+@media (max-width: 900px) {
+  .rank-table th, .rank-table td { padding: 6px 3px; font-size: 12px; }
+  .rank-table thead th { font-size: 11px; }
+  .rank-table th.bracket-th { font-size: 10px; }
+  .rank-table td.bracket-col { font-size: 12px; }
+  .rank-table .comp .comp-meta { font-size: 10px; }
+  .rate-pill { min-width: 40px; padding: 2px 6px; font-size: 12px; }
+}
+@media (max-width: 640px) {
+  /* 极窄视口：阵容列改为多行换行，避免武将名被裁切 */
+  .rank-table .comp .comp-chips { white-space: normal; overflow: visible; }
+  .rank-table .comp .g-chip { display: inline-block; margin: 2px 3px 0 0; }
 }
 
 /* 对战矩阵 */
-.matrix-wrap { max-width: 100%; }
+.matrix-wrap { max-width: 100%; overflow: hidden; }
 .matrix-table {
   border-collapse: separate;
-  border-spacing: 3px;
+  border-spacing: 2px;
+  /* 固定布局：表格始终等于容器宽度，任何视口都不出现横向滚动条 */
+  width: 100%;
+  table-layout: fixed;
 }
 .matrix-table th, .matrix-table td {
-  padding: 4px 6px;
+  padding: 2px 2px;
   text-align: center;
   border: none;
   border-radius: 8px;
-  min-width: 42px;
+  min-width: 30px;
   font-size: 12px;
 }
 .matrix-table thead th {
@@ -561,10 +737,16 @@ body {
   gap: 2px;
 }
 .matrix-table .mh-comp .g-chip {
-  padding: 1px 4px;
-  font-size: 11px;
+  padding: 1px 3px;
+  font-size: 10px;
   background: var(--bg-2);
   white-space: nowrap;
+}
+/* 矩阵表头平均红度角标：紧凑显示，避免挤占列宽 */
+.matrix-table .mh-comp .g-chip .gred {
+  margin-left: 3px;
+  padding: 0 2px;
+  font-size: 8px;
 }
 /* 左上角轴标签：柔和的两行提示，弱化以贴合表头 */
 .matrix-table .corner {
@@ -585,7 +767,7 @@ body {
 .matrix-table .mh-meta {
   display: block;
   margin-top: 3px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 400;
   color: var(--accent-2);
   white-space: nowrap;
@@ -594,9 +776,9 @@ body {
   background: var(--card-2);
   color: var(--text);
   font-weight: 600;
-  font-size: 11px;
+  font-size: 10px;
   white-space: normal;
-  width: 62px;
+  width: 54px;
   line-height: 1.5;
 }
 .matrix-table td.cell { background: var(--bg-2); }
@@ -629,6 +811,29 @@ body {
   border: 1px solid transparent;
 }
 
+/* 窄视口紧凑排版：保持 fixed 布局不出现横向滚动条，
+   通过压缩间距/字号，并把红度角标移到武将名下一行，保证武将名完整可读 */
+@media (max-width: 900px) {
+  .matrix-table th, .matrix-table td { padding: 2px 1px; font-size: 11px; min-width: 0; }
+  /* fixed 布局列宽只参考首行：清掉 thead 固定列宽，让各列按容器宽度均分，表格严格等于容器宽 */
+  .matrix-table thead th { width: auto; font-size: 10px; line-height: 1.3; }
+  .matrix-table .corner { width: 40px; min-width: 40px; }
+  .matrix-table .mh-comp { gap: 1px; }
+  .matrix-table .mh-comp .g-chip { padding: 0 1px; font-size: 9px; max-width: 100%; overflow: hidden; }
+  /* 窄屏红度角标独占一行，不再与武将名同行挤占列宽 */
+  .matrix-table .mh-comp .g-chip .gred {
+    display: block;
+    margin: 0 auto;
+    padding: 0;
+    font-size: 7px;
+    line-height: 1.2;
+  }
+  .matrix-table .mh-meta { font-size: 8px; white-space: normal; line-height: 1.2; }
+  .matrix-table .corner { font-size: 8px; white-space: normal; padding: 3px 1px; line-height: 1.3; }
+  .matrix-table td.cell b { font-size: 11px; }
+  .matrix-table td.cell i { font-size: 9px; }
+}
+
 /* 热力图图例（右上角色条）：标签按 left 锚定在 0%/50%/100% */
 .heat-legend {
   position: relative;
@@ -646,8 +851,10 @@ body {
   height: 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
-  /* 与 heatColor 端点色完全一致：深红(190,30,30)、底白(245,245,245)、深绿(30,130,50) */
-  background: linear-gradient(90deg, rgb(190,30,30) 0%, rgb(245,245,245) 50%, rgb(30,130,50) 100%);
+  /* 与 winRateColor 端点色一致：0% 深红→50% 浅红，50% 浅绿→100% 深绿（50% 为红绿分界） */
+  background: linear-gradient(90deg,
+    rgb(206,45,53) 0%, rgb(250,148,152) 50%,
+    rgb(150,222,180) 50%, rgb(35,150,100) 100%);
 }
 .heat-legend-label {
   position: absolute;
@@ -673,3 +880,110 @@ body {
   border: 1px dashed var(--border);
   border-radius: 12px;
 }
+
+/* ==================== 设置页 ==================== */
+.settings-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.settings-card {
+  background: linear-gradient(180deg, var(--card), var(--bg-2));
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 22px;
+}
+.settings-title {
+  font-size: 16px;
+  color: var(--accent-2);
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.settings-desc {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
+.setting-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+.setting-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.setting-field label {
+  font-size: 13px;
+  color: var(--text);
+}
+.setting-field select,
+.setting-field input[type="number"] {
+  padding: 8px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text);
+  font-size: 14px;
+  min-width: 150px;
+  color-scheme: dark;
+}
+.setting-field input[type="number"]::placeholder { color: var(--text-dim); }
+.setting-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  opacity: 0.85;
+  line-height: 1.3;
+}
+.setting-field select:focus,
+.setting-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(217,164,65,0.18);
+}
+.settings-actions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.settings-toast {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  padding: 8px 14px;
+  background: rgba(18, 25, 40, 0.95);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  font-size: 13px;
+  color: var(--win);
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+  z-index: 20;
+}
+.settings-toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+.btn-primary {
+  margin-left: 0;
+  background: linear-gradient(180deg, rgba(217,164,65,0.34), rgba(217,164,65,0.1));
+  color: #fff;
+  font-weight: 600;
+}
+.btn-ghost {
+  margin-left: 0;
+  border-color: var(--border);
+  background: var(--bg-2);
+  color: var(--text-dim);
+}
+.btn-ghost:hover { color: var(--text); border-color: var(--accent); }

@@ -92,7 +92,8 @@ app.post('/api/parse-many', upload.array('images', 20), async (req, res) => {
       res.status(400).json({ error: '未收到图片文件' });
       return;
     }
-    // 顺序识别，避免并发打爆 OCR 服务
+    // 顺序识别：实测多图并行无加速（4张整版图：顺序17.4s vs 并行17.7s）。
+    // 纯 CPU 下单次 onnxruntime 推理已占满线程池，并行只是排队/线程争用，不改此循环。
     const items = [];
     for (const f of files) {
       const result = await parseBattleImage(f.path);
@@ -109,11 +110,17 @@ app.post('/api/parse-many', upload.array('images', 20), async (req, res) => {
 // 上传目录静态访问（返回缩略图原图）
 app.use('/uploads', express.static(UPLOAD_DIR));
 
-/** 分析接口：按同盟和时间范围获取统计结果 */
+/** 分析接口：按同盟、时间范围、战前兵力下限、阵容场次下限获取统计结果 */
 app.get('/api/analyze', (req, res) => {
   try {
-    const { alliance = '', hours = 0 } = req.query;
-    const result = analyze(String(alliance), Number(hours));
+    const { alliance = '', hours = 0, minHp = 0, minCount = 0, hotMin = 5, hotRate = 0.1, hotHours = 3 } = req.query;
+    // 快速升温阈值由前端设置页驱动；未传时回退到默认值（近3h、至少5场、占比10%）
+    const hot = {
+      min: Number(hotMin) || 5,
+      rate: Number(hotRate) || 0.1,
+      ms: Math.max(1, Number(hotHours) || 3) * 3600 * 1000,
+    };
+    const result = analyze(String(alliance), Number(hours), Number(minHp) || 0, Number(minCount) || 0, hot);
     res.json(result);
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
