@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>战报分析</title>
+  <title>欧润吉战报分析助手</title>
   <link rel="icon" type="image/jpeg" href="/orange.jpg" />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <header class="app-header">
     <div class="header-inner">
-      <h1 class="app-title"><img src="/orange.jpg" alt="战报分析" class="app-logo" /> 战报分析</h1>
+      <h1 class="app-title"><img src="/orange.jpg" alt="欧润吉战报分析助手" class="app-logo" /> 欧润吉战报分析助手</h1>
       <p>上传战报截图，自动识别阵容、同盟与胜负关系</p>
     </div>
   </header>
@@ -29,6 +29,13 @@
       <div class="mode-switch" role="group" aria-label="识别模式">
         <button type="button" class="mode-btn active" data-mode="pc">🖥️ PC 横屏</button>
         <button type="button" class="mode-btn" data-mode="portrait">📱 PE 竖屏</button>
+      </div>
+
+      <!-- 数据导入 / 导出 -->
+      <div class="io-bar">
+        <button id="btn-export" class="btn-soft" type="button" title="导出当前全部战报数据（JSON，可自行备份）">⬇️ 导出数据</button>
+        <button id="btn-import" class="btn-soft primary" type="button" title="导入 JSON 战报数据，自动与现有数据合并去重">⬆️ 导入JSON</button>
+        <input type="file" id="import-input" accept=".json,application/json" hidden />
       </div>
 
       <!-- 上传区 -->
@@ -224,6 +231,6 @@
     <span>© 2026 欧润吉 All rights reserved</span>
   </footer>
 
-  <script src="/app.js?v=20260821-1"></script>
+  <script src="/app.js?v=20260822-2"></script>
 </body>
 </html>

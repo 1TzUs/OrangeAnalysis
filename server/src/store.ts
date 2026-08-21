@@ -96,6 +96,63 @@ export function appendRecords(records: BattleRecord[]): void {
   fs.writeFileSync(DATA_FILE, JSON.stringify(all, null, 2), 'utf-8');
 }
 
+/**
+ * 将单条待导入数据校验并规范化为 BattleRecord；不满足核心字段（阵容 comp、同盟 alliance）视为非法，返回 null。
+ * 兼容旧记录格式（hp 合并字段、缺省字段）与数字/布尔 result。
+ * @param r 待导入的原始记录
+ * @returns 规范化后的记录；非法返回 null
+ */
+function normalizeImported(r: unknown): BattleRecord | null {
+  if (!r || typeof r !== 'object') return null;
+  const o = r as Record<string, unknown>;
+  const comp = typeof o.comp === 'string' && o.comp.trim() ? o.comp.trim() : null;
+  const alliance = typeof o.alliance === 'string' && o.alliance.trim() ? o.alliance.trim() : null;
+  if (!comp || !alliance) return null; // 缺阵容或同盟，无法参与统计，判为非法
+  const hp = splitHp((o.hp as string) ?? '');
+  // 兼容旧 hp 格式：新数据优先取独立的 hpAfter/hpBefore 字段
+  const hpAfter = typeof o.hpAfter === 'string' ? o.hpAfter : hp.after;
+  const hpBefore = typeof o.hpBefore === 'string' ? o.hpBefore : hp.before;
+  return {
+    comp,
+    compReds: Array.isArray(o.compReds) ? o.compReds.map((n) => Number(n)).filter((n) => Number.isFinite(n)) : [],
+    alliance,
+    // result 兼容 'win'/'lose' 与布尔/数字（0=败，其余视为胜）
+    result: o.result === 'lose' || o.result === 0 || o.result === false ? 'lose' : 'win',
+    stars: Number.isFinite(Number(o.stars)) ? Number(o.stars) : -1,
+    ts: Number.isFinite(Number(o.ts)) ? Number(o.ts) : null,
+    battleTime: typeof o.battleTime === 'string' ? o.battleTime : (typeof o.time === 'string' ? o.time : ''),
+    hpAfter,
+    hpBefore,
+    image: typeof o.image === 'string' ? o.image : '',
+  };
+}
+
+/**
+ * 导入一份记录数组：逐条校验并规范化，然后与已有数据合并（按去重键去重）。
+ * 返回统计信息供前端展示。
+ * @param raw 导入的原始数据（顶层数组，或 { items: [...] } 对象）
+ * @returns { added 新增条数, total 有效条数, skipped 非法条数 }
+ */
+export function importRecords(raw: unknown): { added: number; total: number; skipped: number } {
+  const arr = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === 'object' && Array.isArray((raw as { items?: unknown[] }).items)
+      ? (raw as { items: unknown[] }).items
+      : null;
+  if (!arr) throw new Error('文件格式不正确：应为战报记录数组');
+  const valid: BattleRecord[] = [];
+  let skipped = 0;
+  for (const r of arr) {
+    const n = normalizeImported(r);
+    if (n) valid.push(n);
+    else skipped++;
+  }
+  const before = loadRecords().length;
+  appendRecords(valid);
+  const after = loadRecords().length;
+  return { added: after - before, total: valid.length, skipped };
+}
+
 /** 清空全部记录（用于测试/重置） */
 export function clearRecords(): void {
   cache = [];

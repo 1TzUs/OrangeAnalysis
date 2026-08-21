@@ -201,6 +201,56 @@
     fileInput.value = '';
   });
 
+  // ==================== 数据导入 / 导出 ====================
+  const exportBtn = document.getElementById('btn-export');
+  const importBtn = document.getElementById('btn-import');
+  const importInput = document.getElementById('import-input');
+
+  /** 导出全部战报数据：触发浏览器下载 records.json */
+  exportBtn.addEventListener('click', () => {
+    const a = document.createElement('a');
+    a.href = '/api/records/export';
+    a.download = 'records.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  });
+
+  /** 导入 JSON：选文件 → 客户端先校验 JSON 合法性 → 上传后端合并去重 */
+  importBtn.addEventListener('click', () => importInput.click());
+  importInput.addEventListener('change', async () => {
+    const file = importInput.files && importInput.files[0];
+    importInput.value = ''; // 允许重复选择同一文件
+    if (!file) return;
+    let payload;
+    try {
+      payload = JSON.parse(await file.text());
+    } catch {
+      setStatus('error', '❌ 导入失败：文件不是有效的 JSON');
+      return;
+    }
+    setStatus('loading', '正在导入并合并数据…');
+    try {
+      const res = await fetch('/api/records/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || '导入失败');
+      const dup = data.total - data.added;
+      let msg = `✅ 导入完成：新增 ${data.added} 条，合并跳过重复 ${dup} 条`;
+      if (data.skipped) msg += `，忽略无效数据 ${data.skipped} 条`;
+      setStatus(dup > 0 || data.skipped > 0 ? 'warn' : '', msg);
+      // 使同盟筛选与分析缓存失效，保证再次进入分析页时拉到最新数据
+      delete analyzeResultEl.dataset.last;
+      refreshAllianceChips();
+      if (!tabAnalyze.classList.contains('hidden')) loadAnalysis();
+    } catch (e) {
+      setStatus('error', '❌ 导入失败：' + e.message);
+    }
+  });
+
   // ==================== 数据分析 ====================
   const tabParse = document.getElementById('tab-parse');
   const tabAnalyze = document.getElementById('tab-analyze');
@@ -406,6 +456,7 @@
       <h3 class="section-title">🏆 阵容胜率排行
         <span class="top-badge">前 ${topComps.length}</span>
       </h3>
+      <p class="record-count">已收录 <b>${data.total}</b> 场战斗</p>
       <div class="table-wrap rank-table-wrap">
         <table class="rank-table">
           <thead>

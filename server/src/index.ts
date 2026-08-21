@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseBattleImage } from './recognizer.js';
 import { parsePortraitImage } from './recognizer-portrait.js';
-import { battleToRecords, appendRecords, loadRecords, clearRecords, BattleRecord } from './store.js';
+import { battleToRecords, appendRecords, loadRecords, clearRecords, importRecords, BattleRecord } from './store.js';
 import { analyze } from './analysis.js';
 
 // 模块目录：ESM 下用 import.meta.url；被打包为 CJS(exe) 时 import.meta 无 url，回退到 exe 所在目录
@@ -138,6 +138,27 @@ app.get('/api/analyze', (req, res) => {
 /** 获取全部原始战斗记录（供前端展示/调试） */
 app.get('/api/records', (_req, res) => {
   res.json({ items: loadRecords() });
+});
+
+/** 导出战报数据：将全部记录以 records.json 下载（顶层的记录数组，供再次导入） */
+app.get('/api/records/export', (_req, res) => {
+  const data = JSON.stringify(loadRecords(), null, 2);
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename*=UTF-8''${encodeURIComponent('records.json')}`
+  );
+  res.send(data);
+});
+
+/** 导入战报数据：接收记录 JSON，校验格式后与现有数据合并（自动去重） */
+app.post('/api/records/import', (req, res) => {
+  try {
+    const result = importRecords(req.body);
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
 });
 
 /** 清空全部记录 */

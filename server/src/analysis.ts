@@ -283,6 +283,7 @@ export function analyze(
 
   return {
     comps,
+    total: records.length, // 当前筛选下参与统计的有效战斗场数
     matrix: { comps: matrixComps, cells },
     filters: { alliance, hours, minHp, minCount },
     generatedAt: records.length ? Date.now() : null,
