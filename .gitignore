@@ -20,9 +20,3 @@ server/data/
 
 # 日志
 *.log
-
-# Electron 工程资源与构建产物（由 npm run prepare / dist 生成）
-Elc/res/
-Elc/dist/
-Elc/.electron-builder-cache/
-Elc/.electron/
