@@ -228,8 +228,8 @@ export function analyze(
     // 「白板之光」：按分段红度判定——取最低红度段「0-5红」，该段场次达标且胜率 ≥ wbRate
     const wbSeg = s.brackets['0-5红'];
     s.whiteBoard = wbSeg.total >= badge.wbMin && wbSeg.winRate >= badge.wbRate;
-    // 「泥头车」：胜率 > truckRate
-    s.truck = s.total >= badge.truckMin && s.winRate > badge.truckRate;
+    // 「泥头车」：胜率 >= truckRate
+    s.truck = s.total >= badge.truckMin && s.winRate >= badge.truckRate;
     // 「陷阱」：场次较多（≥trapMin）但胜率低于50%
     s.trap = s.total >= badge.trapMin && s.winRate < 50;
     return s;

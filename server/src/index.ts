@@ -120,7 +120,7 @@ app.get('/api/analyze', (req, res) => {
       rate: Number(hotRate) || 0.1,
       ms: Math.max(1, Number(hotHours) || 3) * 3600 * 1000,
     };
-    // 白板之光 / 泥头车 / 陷阱判定阈值由设置页独立下发；未传时回退默认（白板 0-5红段 ≥51%；泥头 >60%；陷阱 ≥20场且 <50%）
+    // 白板之光 / 泥头车 / 陷阱判定阈值由设置页独立下发；未传时回退默认（白板 0-5红段 ≥51%；泥头 ≥60%；陷阱 ≥20场且 <50%）
     const badge = {
       wbRate: Number(wbRate) || 51,
       wbMin: wbMin === undefined || wbMin === '' ? 5 : Number(wbMin),
