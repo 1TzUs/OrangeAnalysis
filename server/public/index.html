@@ -128,7 +128,13 @@
         </div>
 
         <div class="settings-card">
-          <h3 class="settings-title">🔥 快速升温门槛</h3>
+          <div class="settings-head">
+            <h3 class="settings-title">🔥 快速升温</h3>
+            <label class="toggle" title="显示/隐藏「快速升温」标记">
+              <input type="checkbox" id="set-hot-show" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
           <p class="settings-desc">满足「近 N 小时内新出现、至少出场 M 场、占比不低于 R%」的阵容会标记为快速升温</p>
           <div class="setting-row">
             <div class="setting-field">
@@ -136,12 +142,71 @@
               <input type="number" id="set-hot-hours" min="1" max="24" step="1" />
             </div>
             <div class="setting-field">
-              <label for="set-hot-min">最低出场场次</label>
+              <label for="set-hot-min">最低场次</label>
               <input type="number" id="set-hot-min" min="1" max="50" step="1" />
             </div>
             <div class="setting-field">
               <label for="set-hot-rate">出场占比（%）</label>
               <input type="number" id="set-hot-rate" min="1" max="100" step="1" />
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <div class="settings-head">
+            <h3 class="settings-title">🔆 白板之光</h3>
+            <label class="toggle" title="显示/隐藏「白板之光」标记">
+              <input type="checkbox" id="set-wb-show" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <p class="settings-desc">在「0-5红」低红分段内场次达标、且该分段胜率不低于设定值的平民阵容，会标记为「白板之光」（按分段红度判定）</p>
+          <div class="setting-row">
+            <div class="setting-field">
+              <label for="set-wb-rate">胜率下限（%）</label>
+              <input type="number" id="set-wb-rate" min="0" max="100" step="1" />
+            </div>
+            <div class="setting-field">
+              <label for="set-wb-min">最低场次</label>
+              <input type="number" id="set-wb-min" min="0" max="100" step="1" placeholder="0 = 不限" />
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <div class="settings-head">
+            <h3 class="settings-title">🚚 泥头车</h3>
+            <label class="toggle" title="显示/隐藏「泥头车」标记">
+              <input type="checkbox" id="set-truck-show" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <p class="settings-desc">胜率超过设定值的超高胜率阵容，会标记为「泥头车」</p>
+          <div class="setting-row">
+            <div class="setting-field">
+              <label for="set-truck-rate">胜率下限（%）</label>
+              <input type="number" id="set-truck-rate" min="0" max="100" step="1" />
+            </div>
+            <div class="setting-field">
+              <label for="set-truck-min">最低场次</label>
+              <input type="number" id="set-truck-min" min="0" max="100" step="1" placeholder="0 = 不限" />
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <div class="settings-head">
+            <h3 class="settings-title">⚠️ 陷阱</h3>
+            <label class="toggle" title="显示/隐藏「陷阱」标记">
+              <input type="checkbox" id="set-trap-show" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <p class="settings-desc">场次较多但总体胜率低于 50% 的阵容，会标记为「陷阱」，提示谨慎使用</p>
+          <div class="setting-row">
+            <div class="setting-field">
+              <label for="set-trap-min">最低场次</label>
+              <input type="number" id="set-trap-min" min="0" max="100" step="1" placeholder="0 = 不限" />
             </div>
           </div>
         </div>

@@ -606,11 +606,80 @@ body {
   border: 5px solid transparent;
   border-top-color: #1f2530;
 }
-.hot-badge:hover .hot-tip {
+.hot-badge:hover .hot-tip,
+.wb-badge:hover .hot-tip,
+.truck-badge:hover .hot-tip,
+.trap-badge:hover .hot-tip {
   opacity: 1;
   visibility: visible;
   transform: translateX(-50%) translateY(0);
 }
+
+/* 「白板之光」徽标：低红平民队，白板起底 + 淡金描边，通透轻量 */
+.wb-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ffffff, #f4edd9);
+  color: #6b4d12;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  border: 1px solid rgba(180, 150, 80, 0.55);
+  box-shadow: 0 1px 4px rgba(217, 164, 65, 0.28);
+  white-space: nowrap;
+  cursor: default;
+  transition: transform 0.15s, filter 0.15s;
+}
+.wb-badge:hover { transform: translateY(-1px); filter: brightness(1.03); }
+
+/* 「泥头车」徽标：超高胜率，橙红重磅高饱和，冲击醒目 */
+.truck-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ff8c42, #e8302c);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 1px 5px rgba(232, 60, 40, 0.35);
+  white-space: nowrap;
+  cursor: default;
+  transition: transform 0.15s, filter 0.15s;
+}
+.truck-badge:hover { transform: translateY(-1px); filter: brightness(1.06); }
+
+/* 「陷阱」徽标：场次多但胜率偏低，暗褐/土金警告色，传达「谨慎有坑」的质感 */
+.trap-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #8a6128, #5c4630);
+  color: #f2e7cd;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  border: 1px solid rgba(242, 199, 122, 0.35);
+  box-shadow: 0 1px 4px rgba(80, 60, 30, 0.4);
+  white-space: nowrap;
+  cursor: default;
+  transition: transform 0.15s, filter 0.15s;
+}
+.trap-badge:hover { transform: translateY(-1px); filter: brightness(1.08); }
 
 /* 红度分档胜率列 */
 .rank-table th.bracket-th {
@@ -900,6 +969,61 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+/* 设置卡片标题行：标题左 + 显示/隐藏开关右 */
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 5px;
+}
+.settings-head .settings-title {
+  margin-bottom: 0;
+}
+/* 显示/隐藏徽标的拨动开关 */
+.toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: 42px;
+  height: 24px;
+  cursor: pointer;
+}
+.toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--border);
+  transition: background 0.2s;
+}
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--text);
+  transition: transform 0.2s;
+}
+.toggle input:checked + .toggle-slider {
+  background: var(--accent);
+}
+.toggle input:checked + .toggle-slider::before {
+  transform: translateX(18px);
+}
+.toggle input:focus-visible + .toggle-slider {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 2px;
 }
 .settings-desc {
   font-size: 13px;

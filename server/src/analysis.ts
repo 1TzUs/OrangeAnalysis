@@ -32,6 +32,9 @@ export interface CompStat {
   brackets: Record<string, { total: number; wins: number; winRate: number }>;
   hot: boolean; // 是否「快速升温」：近 3h 新出现且出场占比达标
   hotCount: number; // 近 3h 出场场次
+  whiteBoard: boolean; // 「白板之光」：按分段红度判定——最低红度段「0-5红」场次达标且该段胜率 ≥wbRate
+  truck: boolean; // 「泥头车」：胜率 >60%
+  trap: boolean; // 「陷阱」：场次较多（≥trapMin）但胜率低于50%
 }
 
 /** 对战矩阵单元 */
@@ -81,6 +84,7 @@ export function analyze(
   minHp = 0,
   minCount = 0,
   hot: { min: number; rate: number; ms: number } = { min: 5, rate: 0.1, ms: 3 * 3600 * 1000 },
+  badge: { wbRate: number; wbMin: number; truckRate: number; truckMin: number; trapMin: number } = { wbRate: 51, wbMin: 5, truckRate: 60, truckMin: 5, trapMin: 20 },
 ): AnalysisResult {
   const now = Date.now();
   const all = loadRecords();
@@ -147,6 +151,9 @@ export function analyze(
         brackets: {},
         hot: false,
         hotCount: 0,
+        whiteBoard: false,
+        truck: false,
+        trap: false,
       });
     }
     const stat = compMap.get(r.comp)!;
@@ -218,6 +225,13 @@ export function analyze(
       hotTotal > 0 &&
       he.count / hotTotal >= HOT_RATE
     );
+    // 「白板之光」：按分段红度判定——取最低红度段「0-5红」，该段场次达标且胜率 ≥ wbRate
+    const wbSeg = s.brackets['0-5红'];
+    s.whiteBoard = wbSeg.total >= badge.wbMin && wbSeg.winRate >= badge.wbRate;
+    // 「泥头车」：胜率 > truckRate
+    s.truck = s.total >= badge.truckMin && s.winRate > badge.truckRate;
+    // 「陷阱」：场次较多（≥trapMin）但胜率低于50%
+    s.trap = s.total >= badge.trapMin && s.winRate < 50;
     return s;
   });
 

@@ -221,13 +221,22 @@
   const tabSettings = document.getElementById('tab-settings');
   const SETTINGS_KEY = 'zabao.settings';
   // 默认设置：有效战报口径(0=不限) + 快速升温门槛(近3h/至少5场/占比10%)
-  const DEFAULT_SETTINGS = { count: '0', hp: '0', hotHours: '3', hotMin: '5', hotRate: '10' };
+  const DEFAULT_SETTINGS = { count: '0', hp: '0', hotHours: '3', hotMin: '5', hotRate: '10', wbRate: '51', wbMin: '5', truckRate: '60', truckMin: '5', hotShow: '1', wbShow: '1', truckShow: '1', trapMin: '20', trapShow: '1' };
   const settingsEls = {
     count: document.getElementById('set-count'),
     hp: document.getElementById('set-hp'),
     hotHours: document.getElementById('set-hot-hours'),
     hotMin: document.getElementById('set-hot-min'),
     hotRate: document.getElementById('set-hot-rate'),
+    wbRate: document.getElementById('set-wb-rate'),
+    wbMin: document.getElementById('set-wb-min'),
+    truckRate: document.getElementById('set-truck-rate'),
+    truckMin: document.getElementById('set-truck-min'),
+    hotShow: document.getElementById('set-hot-show'),
+    wbShow: document.getElementById('set-wb-show'),
+    truckShow: document.getElementById('set-truck-show'),
+    trapMin: document.getElementById('set-trap-min'),
+    trapShow: document.getElementById('set-trap-show'),
   };
   const settingsToast = document.getElementById('settings-toast');
   /** 读取持久化设置（解析失败回退默认值） */
@@ -242,9 +251,13 @@
   function saveSettings(s) {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
   }
-  /** 将设置对象回填到设置表单控件 */
+  /** 将设置对象回填到设置表单控件（checkbox 用 checked，其余用 value） */
   function fillSettingsForm(s) {
-    for (const k in settingsEls) settingsEls[k].value = s[k];
+    for (const k in settingsEls) {
+      const el = settingsEls[k];
+      if (el.type === 'checkbox') el.checked = String(s[k]) === '1';
+      else el.value = s[k];
+    }
   }
   /** 显示保存成功提示 */
   function showSettingsToast(msg) {
@@ -304,6 +317,15 @@
     params.set('hotMin', s.hotMin || DEFAULT_SETTINGS.hotMin);
     params.set('hotRate', s.hotRate || DEFAULT_SETTINGS.hotRate);
     params.set('hotHours', s.hotHours || DEFAULT_SETTINGS.hotHours);
+    // 白板之光 / 泥头车判定阈值由设置页独立下发
+    params.set('wbRate', s.wbRate || DEFAULT_SETTINGS.wbRate);
+    // wbMin 允许显式填 0（不设场次门槛），故仅当为空字符串时才回退默认值
+    params.set('wbMin', (s.wbMin === undefined || s.wbMin === '') ? DEFAULT_SETTINGS.wbMin : s.wbMin);
+    params.set('truckRate', s.truckRate || DEFAULT_SETTINGS.truckRate);
+    // truckMin 允许显式填 0（不设场次门槛），故仅当为空字符串时才回退默认值
+    params.set('truckMin', (s.truckMin === undefined || s.truckMin === '') ? DEFAULT_SETTINGS.truckMin : s.truckMin);
+    // trapMin 允许显式填 0（不设场次门槛），故仅当为空字符串时才回退默认值
+    params.set('trapMin', (s.trapMin === undefined || s.trapMin === '') ? DEFAULT_SETTINGS.trapMin : s.trapMin);
     // 记录当前滚动位置，筛选切换后保持浏览位置不变，不再跳回顶部
     const prevScroll = window.scrollY;
     // 已有内容时保留旧数据，仅显示顶部细加载条，避免内容清空导致高度塌陷、滚动被钳制回顶
@@ -461,6 +483,25 @@
       .join('');
   }
 
+  /** 阵容标识徽标（快速升温 / 白板之光 / 泥头车），悬停显示判定说明；可在设置页独立开关显示 */
+  function rankBadges(c) {
+    const s = loadSettings();
+    let h = '';
+    if (c.hot && s.hotShow !== '0') {
+      h += `<span class="hot-badge"><span class="flame">🔥</span>快速升温<span class="hot-tip">近 ${s.hotHours || 3} 小时新出现、至少 ${s.hotMin || 5} 场，占比 ≥ ${s.hotRate || 10}%</span></span>`;
+    }
+    if (c.whiteBoard && s.wbShow !== '0') {
+      h += `<span class="wb-badge">🔆 白板之光<span class="hot-tip">「0-5红」低红段内场次 ≥${s.wbMin || 5} 且该段胜率 ≥${s.wbRate || 51}%</span></span>`;
+    }
+    if (c.truck && s.truckShow !== '0') {
+      h += `<span class="truck-badge">🚚 泥头车<span class="hot-tip">胜率 ≥${s.truckRate || 60}%</span></span>`;
+    }
+    if (c.trap && s.trapShow !== '0') {
+      h += `<span class="trap-badge">⚠️ 陷阱<span class="hot-tip">场次 ≥${s.trapMin || 20} 且胜率 &lt;50%，谨慎使用</span></span>`;
+    }
+    return h;
+  }
+
   /** 排名表行 */
   function rankRow(c, i, colorOn) {
     const winRate = c.total ? Math.round((c.wins / c.total) * 100) : 0;
@@ -475,7 +516,7 @@
         <td class="idx${i < 3 ? ' top-' + (i + 1) : ''}">${i + 1}</td>
         <td class="comp">
           <div class="comp-chips">${compChips(c.comp, c.genReds)}</div>
-          <div class="comp-meta">${c.total}场${c.hot ? '<span class="hot-badge"><span class="flame">🔥</span>快速升温<span class="hot-tip">近 3 小时新出现、至少 5 场，占比 ≥ 10%</span></span>' : ''}</div>
+          <div class="comp-meta">${c.total}场${rankBadges(c)}</div>
         </td>
         <td>
           <div class="rate-cell">
@@ -602,6 +643,15 @@
       hotHours: String(clamp(settingsEls.hotHours.value, 1, 24, 3)),
       hotMin: String(clamp(settingsEls.hotMin.value, 1, 50, 5)),
       hotRate: String(clamp(settingsEls.hotRate.value, 1, 100, 10)),
+      wbRate: String(clamp(settingsEls.wbRate.value, 0, 100, 51)),
+      wbMin: String(clamp(settingsEls.wbMin.value, 0, 100, 5)),
+      truckRate: String(clamp(settingsEls.truckRate.value, 0, 100, 60)),
+      truckMin: String(clamp(settingsEls.truckMin.value, 0, 100, 5)),
+      hotShow: settingsEls.hotShow.checked ? '1' : '0',
+      wbShow: settingsEls.wbShow.checked ? '1' : '0',
+      truckShow: settingsEls.truckShow.checked ? '1' : '0',
+      trapMin: String(clamp(settingsEls.trapMin.value, 0, 100, 20)),
+      trapShow: settingsEls.trapShow.checked ? '1' : '0',
     };
     saveSettings(s);
     showSettingsToast('已保存 ✓');

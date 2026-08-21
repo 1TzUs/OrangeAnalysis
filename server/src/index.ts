@@ -113,14 +113,22 @@ app.use('/uploads', express.static(UPLOAD_DIR));
 /** 分析接口：按同盟、时间范围、战前兵力下限、阵容场次下限获取统计结果 */
 app.get('/api/analyze', (req, res) => {
   try {
-    const { alliance = '', hours = 0, minHp = 0, minCount = 0, hotMin = 5, hotRate = 0.1, hotHours = 3 } = req.query;
+    const { alliance = '', hours = 0, minHp = 0, minCount = 0, hotMin = 5, hotRate = 0.1, hotHours = 3, wbRate = 51, wbMin = 5, truckRate = 60, truckMin = 5, trapMin = 20 } = req.query;
     // 快速升温阈值由前端设置页驱动；未传时回退到默认值（近3h、至少5场、占比10%）
     const hot = {
       min: Number(hotMin) || 5,
       rate: Number(hotRate) || 0.1,
       ms: Math.max(1, Number(hotHours) || 3) * 3600 * 1000,
     };
-    const result = analyze(String(alliance), Number(hours), Number(minHp) || 0, Number(minCount) || 0, hot);
+    // 白板之光 / 泥头车 / 陷阱判定阈值由设置页独立下发；未传时回退默认（白板 0-5红段 ≥51%；泥头 >60%；陷阱 ≥20场且 <50%）
+    const badge = {
+      wbRate: Number(wbRate) || 51,
+      wbMin: wbMin === undefined || wbMin === '' ? 5 : Number(wbMin),
+      truckRate: Number(truckRate) || 60,
+      truckMin: truckMin === undefined || truckMin === '' ? 5 : Number(truckMin),
+      trapMin: trapMin === undefined || trapMin === '' ? 20 : Number(trapMin),
+    };
+    const result = analyze(String(alliance), Number(hours), Number(minHp) || 0, Number(minCount) || 0, hot, badge);
     res.json(result);
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });

@@ -1,6 +1,7 @@
 # Node.js 依赖
 node_modules/
 server/node_modules/
+.npmcache/
 
 # 构建/打包产物
 build/
