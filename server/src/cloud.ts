@@ -14,7 +14,7 @@ const BIN_ID = process.env.CLOUD_BIN_ID ?? '6a8d859ada38895dfe0e7cd5';
 const ACCESS_KEY =
   process.env.CLOUD_ACCESS_KEY ?? '$2a$10$GBsdXRvfpV6r25dCWLE0s.CWe0qyDzHs/PsiuEbDVolJuqkRKpGu2';
 const MASTER_KEY =
-  process.env.CLOUD_MASTER_KEY ?? '$2a$10$raFBFZ14g7HPNFZgxn3BXuQ3oHm7kDMVvVaMdY5XLNRb9z98txJdK';
+  process.env.CLOUD_MASTER_KEY ?? '$2a$10$OULWC83uArM4B5rRUOuUA.RqzP9bVhvGX0bDpFLJ2I.oLUnXgv32q';
 
 const API = 'https://api.jsonbin.io/v3/b/';
 
