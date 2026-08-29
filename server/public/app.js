@@ -251,6 +251,201 @@
     }
   });
 
+  // ==================== 下拉菜单（本地数据 / 云端 共用）====================
+  /** 初始化一个下拉菜单：btn 触发开合，点击菜单外自动关闭 */
+  function initDropdown(wrap, btn) {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const menu = wrap.querySelector('.dd-menu');
+      const isOpen = !menu.classList.contains('hidden');
+      closeDropdowns(); // 先收起所有（含本项：若原本是开的，则就此收起）
+      if (!isOpen) {
+        // 本项原本收起 → 展开它
+        menu.classList.remove('hidden');
+        wrap.classList.add('open');
+      }
+    });
+  }
+  /** 关闭所有下拉菜单 */
+  function closeDropdowns() {
+    document.querySelectorAll('.dd').forEach((w) => {
+      w.querySelector('.dd-menu')?.classList.add('hidden');
+      w.classList.remove('open');
+    });
+  }
+  // 点击页面其他区域时关闭全部菜单
+  document.addEventListener('click', closeDropdowns);
+
+  const localWrap = document.getElementById('local-wrap');
+  const localMenu = document.getElementById('local-menu');
+  const cloudWrap = document.getElementById('cloud-wrap');
+  const cloudMenu = document.getElementById('cloud-menu');
+  initDropdown(localWrap, document.getElementById('btn-local'));
+  initDropdown(cloudWrap, document.getElementById('btn-cloud'));
+
+  // ==================== 确认弹窗（替代原生 confirm / alert）====================
+  const modalEl = document.getElementById('modal');
+  const modalIcon = document.getElementById('modal-icon');
+  const modalTitle = document.getElementById('modal-title');
+  const modalMsg = document.getElementById('modal-msg');
+  const modalOk = document.getElementById('modal-ok');
+  const modalCancel = document.getElementById('modal-cancel');
+  const modalInput = document.getElementById('modal-input');
+
+  /**
+   * 弹出自定义确认框，返回 Promise<boolean>（回车=确定，Esc/取消=否）。
+   * @param opts { title, message, okText, okClass, icon }
+   */
+  function openConfirm(opts = {}) {
+    return new Promise((resolve) => {
+      const { title = '确认操作', message = '', okText = '确定', okClass = 'btn-primary', icon = '⚠️' } = opts;
+      modalTitle.textContent = title;
+      modalMsg.textContent = message;
+      modalIcon.textContent = icon;
+      modalOk.textContent = okText;
+      modalOk.className = 'btn ' + okClass;
+      modalEl.classList.remove('hidden');
+      const done = (val) => {
+        modalEl.classList.add('hidden');
+        modalOk.removeEventListener('click', onOk);
+        modalCancel.removeEventListener('click', onCancel);
+        document.removeEventListener('keydown', onKey);
+        resolve(val);
+      };
+      const onOk = () => done(true);
+      const onCancel = () => done(false);
+      const onKey = (e) => {
+        if (e.key === 'Escape') done(false);
+        if (e.key === 'Enter') done(true);
+      };
+      modalOk.addEventListener('click', onOk);
+      modalCancel.addEventListener('click', onCancel);
+      document.addEventListener('keydown', onKey);
+      modalOk.focus();
+    });
+  }
+
+  /** 单按钮提示框（替代原生 alert） */
+  function openAlert(message, opts = {}) {
+    const { title = '提示', icon = 'ℹ️' } = opts;
+    return openConfirm({ title, message, icon, okText: '知道了', okClass: 'btn-primary' });
+  }
+
+  /**
+   * 弹出带口令输入框的确认框（用于清空云端等危险操作），返回 Promise<string|null>。
+   * 确定/回车 = 输入的口令；Esc/取消 = null。校验在服务端完成，口令不进前端代码。
+   * @param opts { title, message, okText, okClass, icon, placeholder }
+   */
+  function openPassword(opts = {}) {
+    return new Promise((resolve) => {
+      const { title = '口令确认', message = '', okText = '确定', okClass = 'btn-danger', icon = '🔒', placeholder = '请输入操作口令' } = opts;
+      modalTitle.textContent = title;
+      modalMsg.textContent = message;
+      modalIcon.textContent = icon;
+      modalOk.textContent = okText;
+      modalOk.className = 'btn ' + okClass;
+      modalInput.placeholder = placeholder;
+      modalInput.value = '';
+      modalInput.removeAttribute('hidden');
+      modalEl.classList.remove('hidden');
+      const done = (val) => {
+        modalEl.classList.add('hidden');
+        modalInput.setAttribute('hidden', '');
+        modalOk.removeEventListener('click', onOk);
+        modalCancel.removeEventListener('click', onCancel);
+        document.removeEventListener('keydown', onKey);
+        resolve(val);
+      };
+      const onOk = () => done(modalInput.value);
+      const onCancel = () => done(null);
+      const onKey = (e) => {
+        if (e.key === 'Escape') done(null);
+        if (e.key === 'Enter') done(modalInput.value);
+      };
+      modalOk.addEventListener('click', onOk);
+      modalCancel.addEventListener('click', onCancel);
+      document.addEventListener('keydown', onKey);
+      modalInput.focus();
+    });
+  }
+
+  const cloudFetch = document.getElementById('cloud-fetch');
+  const cloudPush = document.getElementById('cloud-push');
+
+  /** 下载云端数据：用云端覆盖本地（破坏性，需二次确认） */
+  cloudFetch.addEventListener('click', async () => {
+    closeDropdowns();
+    const ok = await openConfirm({
+      title: '覆盖本地数据',
+      message: '即将从云端【下载】数据并覆盖当前本地数据。\n本地未归档的记录将被替换，此操作不可恢复。',
+      okText: '下载并覆盖',
+      okClass: 'btn-danger',
+      icon: '⬇️',
+    });
+    if (!ok) return;
+    setStatus('loading', '正在从云端下载数据…');
+    try {
+      const res = await fetch('/api/cloud/pull');
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || '云端下载失败');
+      setStatus('warn', `✅ 已从云端下载并覆盖本地，共 ${data.total} 条记录`);
+      // 本地数据已变更：失效分析缓存并刷新联盟筛选，与分析页一致
+      delete analyzeResultEl.dataset.last;
+      refreshAllianceChips();
+      if (!tabAnalyze.classList.contains('hidden')) loadAnalysis();
+    } catch (e) {
+      setStatus('error', `❌ 云端下载失败：${e.message}`);
+    }
+  });
+
+  /** 上传本地数据：与云端按去重键合并后写回（不再直接覆盖，避免丢失云端已有记录） */
+  cloudPush.addEventListener('click', async () => {
+    closeDropdowns();
+    const ok = await openConfirm({
+      title: '合并上传到云端',
+      message: '即将把本地数据与云端数据【合并去重】后写回云端（records.json）。\n云端已存在的记录会保留，仅并入本地新增记录。',
+      okText: '上传并合并',
+      okClass: 'btn-danger',
+      icon: '⬆️',
+    });
+    if (!ok) return;
+    setStatus('loading', '正在合并上传到云端…');
+    try {
+      const res = await fetch('/api/cloud/push', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || '云端上传失败');
+      let msg = `✅ 云端合并完成：共 ${data.total} 条（本次新增 ${data.added} 条）`;
+      if (data.skipped) msg += `，忽略无效数据 ${data.skipped} 条`;
+      setStatus('warn', msg);
+    } catch (e) {
+      setStatus('error', `❌ 云端上传失败：${e.message}`);
+    }
+  });
+
+  /** 清空云端数据：口令在服务端校验，前端不存口令 */
+  document.getElementById('btn-cloud-clear').addEventListener('click', async () => {
+    const pw = await openPassword({
+      title: '清空云端数据',
+      message: '即将清空 JSONBin 云端保存的全部战报数据（records.json）。\n此操作不可恢复，仅影响云端，不影响本地数据。\n请输入操作口令确认：',
+      okText: '清空',
+      okClass: 'btn-danger',
+      icon: '🗑️',
+    });
+    if (pw == null) return;
+    try {
+      const res = await fetch('/api/cloud/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || '清空失败');
+      openAlert(`口令验证通过，云端数据已清空（原 ${data.cleared} 条）。`, { title: '清空完成', icon: '✅' });
+    } catch (e) {
+      openAlert(e.message, { title: '操作失败', icon: '❌' });
+    }
+  });
+
   // ==================== 数据分析 ====================
   const tabParse = document.getElementById('tab-parse');
   const tabAnalyze = document.getElementById('tab-analyze');
@@ -732,14 +927,21 @@
     }
   });
   document.getElementById('btn-clear').addEventListener('click', async () => {
-    if (!confirm('确定清空全部已识别的战斗记录？此操作不可恢复。')) return;
+    const ok = await openConfirm({
+      title: '清空全部记录',
+      message: '确定清空全部已识别的战斗记录？\n此操作不可恢复。',
+      okText: '清空',
+      okClass: 'btn-danger',
+      icon: '🗑️',
+    });
+    if (!ok) return;
     try {
       await fetch('/api/records/clear', { method: 'POST' });
       refreshAllianceChips([]);
       currentAlliance = '';
       loadAnalysis();
     } catch (e) {
-      alert('清空失败：' + e.message);
+      openAlert('清空失败：' + e.message);
     }
   });
 
@@ -780,4 +982,14 @@
   try {
     activateTab(localStorage.getItem('zabao.tab') || 'parse');
   } catch (e) { /* ignore */ }
+
+  // 打开网页时自动检查武将名单更新（GitHub 源）。无更新/未配置不打扰；静默失败，不阻塞页面。
+  fetch('/api/generals/update')
+    .then((res) => res.json())
+    .then((r) => {
+      if (r && r.updated && r.version) {
+        openAlert(`武将名单已更新至 v${r.version}`);
+      }
+    })
+    .catch(() => { /* 网络/服务异常时静默，沿用现有名单 */ });
 })();

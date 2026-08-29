@@ -1,7 +1,7 @@
 /**
  * 模糊匹配工具：用武将词典纠正 OCR 结果，提升识别准确性。
  */
-import { GENERALS } from './dict.js';
+import { getGenerals } from './generals.js';
 
 /**
  * OCR 已知错字 → 正确武将 映射表。
@@ -55,7 +55,7 @@ export function matchGeneral(raw: string): { name: string; distance: number } | 
   const alias = OCR_ALIASES[s];
   if (alias) return { name: alias, distance: 0 };
   let best: { name: string; distance: number } | null = null;
-  for (const cand of GENERALS) {
+  for (const cand of getGenerals()) {
     const d = editDistance(s, cand);
     if (!best || d < best.distance) best = { name: cand, distance: d };
   }

@@ -153,11 +153,48 @@ export function importRecords(raw: unknown): { added: number; total: number; ski
   return { added: after - before, total: valid.length, skipped };
 }
 
+/**
+ * 合并云端数据与本地数据（按去重键去重，云端记录优先保留，仅追加本地新增）。
+ * 用于「上传云端（去重）」：把云端旧数据与本地新数据合并，避免覆盖时丢掉云端已有记录。
+ * @param cloudRaw 云端原始记录（未规范化，兼容旧格式/含非法项）
+ * @param local 本地已规范化的记录
+ * @returns { records 合并后的完整数组, added 本地新增并入的条数, skipped 云端非法被剔除条数 }
+ */
+export function mergeRecords(
+  cloudRaw: unknown[],
+  local: BattleRecord[]
+): { records: BattleRecord[]; added: number; skipped: number } {
+  const cloudValid: BattleRecord[] = [];
+  let skipped = 0;
+  for (const r of cloudRaw) {
+    const n = normalizeImported(r);
+    if (n) cloudValid.push(n);
+    else skipped++;
+  }
+  const seen = new Set(cloudValid.map(recordKey));
+  const records = [...cloudValid];
+  let added = 0;
+  for (const r of local) {
+    if (seen.has(recordKey(r))) continue;
+    seen.add(recordKey(r));
+    records.push(r);
+    added++;
+  }
+  return { records, added, skipped };
+}
+
 /** 清空全部记录（用于测试/重置） */
 export function clearRecords(): void {
   cache = [];
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(DATA_FILE, JSON.stringify([], null, 2), 'utf-8');
+}
+
+/** 覆盖全部记录（云端拉取覆盖本地用）：直接替换内存缓存并写盘 */
+export function saveRecords(records: BattleRecord[]): void {
+  cache = [...records];
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(DATA_FILE, JSON.stringify(records, null, 2), 'utf-8');
 }
 
 /** 将武将列表规范化为阵容 key 及逐武将红度（排序去重，保证顺序无关，红度顺序与 key 一致） */

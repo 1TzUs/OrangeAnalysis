@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>欧润吉战报分析助手</title>
   <link rel="icon" type="image/jpeg" href="/orange.jpg" />
-  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/style.css?v=20260826-4" />
 </head>
 <body>
   <header class="app-header">
@@ -31,10 +31,34 @@
         <button type="button" class="mode-btn" data-mode="portrait">📱 PE 竖屏</button>
       </div>
 
-      <!-- 数据导入 / 导出 -->
+      <!-- 数据导入 / 导出 / 云端 -->
       <div class="io-bar">
-        <button id="btn-export" class="btn-soft" type="button" title="导出当前全部战报数据（JSON，可自行备份）">⬇️ 导出数据</button>
-        <button id="btn-import" class="btn-soft primary" type="button" title="导入 JSON 战报数据，自动与现有数据合并去重">⬆️ 导入JSON</button>
+        <div class="dd" id="local-wrap">
+          <button id="btn-local" class="btn-soft" type="button" title="本地战报数据的导入与导出">本地数据 <span class="caret">▾</span></button>
+          <div id="local-menu" class="dd-menu hidden">
+            <button id="btn-export" class="dd-item" type="button">
+              <span class="dd-icon">⬇️</span>
+              <span class="dd-text"><strong>导出数据</strong><small>下载当前全部战报为 JSON 备份</small></span>
+            </button>
+            <button id="btn-import" class="dd-item" type="button">
+              <span class="dd-icon">⬆️</span>
+              <span class="dd-text"><strong>导入数据</strong><small>从 JSON 文件合并去重导入</small></span>
+            </button>
+          </div>
+        </div>
+        <div class="dd" id="cloud-wrap">
+          <button id="btn-cloud" class="btn-soft" type="button" title="通过 JSONBin.io 在云端同步战报数据">云端数据 <span class="caret">▾</span></button>
+          <div id="cloud-menu" class="dd-menu hidden">
+            <button id="cloud-fetch" class="dd-item" type="button">
+              <span class="dd-icon">⬇️</span>
+              <span class="dd-text"><strong>下载数据</strong><small>用云端数据覆盖本地</small></span>
+            </button>
+            <button id="cloud-push" class="dd-item" type="button">
+              <span class="dd-icon">⬆️</span>
+              <span class="dd-text"><strong>上传数据</strong><small>与云端数据合并去重后上传</small></span>
+            </button>
+          </div>
+        </div>
         <input type="file" id="import-input" accept=".json,application/json" hidden />
       </div>
 
@@ -218,6 +242,17 @@
           </div>
         </div>
 
+        <!-- 云端数据（危险操作） -->
+        <div class="settings-card danger-card">
+          <div class="settings-head">
+            <h3 class="settings-title">☁️ 云端数据</h3>
+          </div>
+          <p class="settings-desc">清空 JSONBin 云端里保存的全部战报数据。该操作不可恢复，需输入操作口令确认。</p>
+          <div class="setting-row">
+            <button id="btn-cloud-clear" type="button" class="btn btn-danger">清空云端数据</button>
+          </div>
+        </div>
+
         <div class="settings-actions">
           <span id="settings-toast" class="settings-toast"></span>
           <button id="btn-reset-settings" class="btn btn-ghost">恢复默认</button>
@@ -227,10 +262,24 @@
     </section>
   </main>
 
+  <!-- 确认弹窗（替代原生 confirm，style 与主题一致）。放 main 直接子级，避免被任一 tab 面板的 hidden(display:none) 裁剪 -->
+  <div id="modal" class="modal-overlay hidden">
+    <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-icon" id="modal-icon">⚠️</div>
+      <h3 class="modal-title" id="modal-title">确认操作</h3>
+      <p class="modal-msg" id="modal-msg"></p>
+      <input id="modal-input" class="modal-input" type="password" placeholder="请输入操作口令" autocomplete="off" hidden />
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="modal-cancel">取消</button>
+        <button type="button" class="btn btn-danger" id="modal-ok">确定</button>
+      </div>
+    </div>
+  </div>
+
   <footer class="app-footer">
     <span>© 2026 欧润吉 All rights reserved</span>
   </footer>
 
-  <script src="/app.js?v=20260822-2"></script>
+  <script src="/app.js?v=20260826-5"></script>
 </body>
 </html>

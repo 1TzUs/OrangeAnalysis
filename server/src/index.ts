@@ -9,8 +9,13 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseBattleImage } from './recognizer.js';
 import { parsePortraitImage } from './recognizer-portrait.js';
-import { battleToRecords, appendRecords, loadRecords, clearRecords, importRecords, BattleRecord } from './store.js';
+import { battleToRecords, appendRecords, loadRecords, clearRecords, importRecords, saveRecords, mergeRecords, BattleRecord } from './store.js';
 import { analyze } from './analysis.js';
+import { fetchRecords, pushRecords, clearRemote } from './cloud.js';
+import { getGenerals, getVersion, getCount, checkGeneralsUpdate } from './generals.js';
+
+// 清空云端等危险操作的口令（仅存于服务端比对，不下发前端）
+const CLOUD_PASSWORD = 'orange';
 
 // 模块目录：ESM 下用 import.meta.url；被打包为 CJS(exe) 时 import.meta 无 url，回退到 exe 所在目录
 const __dirname = (() => {
@@ -51,6 +56,13 @@ app.use(cors());
 app.use(express.json({ limit: '20mb' }));
 
 // 静态资源（前端）
+// 入口 HTML 禁止缓存：避免浏览器拿到旧的 index.html（引用旧版 app.js?v=...）而加载不到最新逻辑。
+app.use('/', (req, res, next) => {
+  if (req.path === '/' || req.path.endsWith('.html')) {
+    res.set('Cache-Control', 'no-store');
+  }
+  next();
+});
 app.use(express.static(PUBLIC_DIR));
 
 /**
@@ -161,10 +173,79 @@ app.post('/api/records/import', (req, res) => {
   }
 });
 
+/** 获取当前生效的武将名单（含版本与数量，供前端展示/排查） */
+app.get('/api/generals', (_req, res) => {
+  res.json({ generals: getGenerals(), version: getVersion(), count: getCount() });
+});
+
+/** 检查并更新武将名单：从 GitHub 拉取远程名单，校验后热替换 + 持久化 */
+app.get('/api/generals/update', async (_req, res) => {
+  try {
+    const result = await checkGeneralsUpdate();
+    res.json({ ok: result.updated, ...result });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
 /** 清空全部记录 */
 app.post('/api/records/clear', (_req, res) => {
   clearRecords();
   res.json({ ok: true, count: 0 });
+});
+
+/** 云端：从 JSONBin.io 拉取记录并【覆盖】本地数据。Key 仅存于服务端，不透传前端 */
+app.get('/api/cloud/pull', async (_req, res) => {
+  try {
+    const records = await fetchRecords();
+    saveRecords(records);
+    res.json({ ok: true, total: records.length });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+/**
+ * 云端上传（去重合并）：读取云端旧数据，与本地数据按去重键合并后整体写回，避免覆盖时丢失云端已有记录。
+ * 行为与「导入数据」的去重逻辑一致：云端已存在的记录保留，仅把本地新增并入。
+ */
+app.post('/api/cloud/push', async (_req, res) => {
+  try {
+    const local = loadRecords();
+    if (!local.length) {
+      res.status(400).json({ error: '本地暂无数据，拒绝上传云端' });
+      return;
+    }
+    const cloud = await fetchRecords();
+    const merged = mergeRecords(cloud, local);
+    if (!merged.records.length) {
+      res.status(400).json({ error: '合并后云端无有效数据' });
+      return;
+    }
+    const info = await pushRecords(merged.records);
+    res.json({ ok: true, total: merged.records.length, added: merged.added, skipped: merged.skipped, ...info });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+/**
+ * 清空云端数据：需口令校验。JSONBin 不允许空 record，故清空后写入占位结构 { records: [] }，
+ * 读回时为空数组（见 cloud.fetchRecords）。
+ */
+app.post('/api/cloud/clear', async (req, res) => {
+  try {
+    const password = (req.body as { password?: unknown } | undefined)?.password;
+    if (typeof password !== 'string' || password !== CLOUD_PASSWORD) {
+      res.status(403).json({ error: '操作口令错误' });
+      return;
+    }
+    const cleared = (await fetchRecords()).length; // 记录清空前云端条数，供前端提示
+    await clearRemote();
+    res.json({ ok: true, cleared });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
 });
 
 const PORT = Number(process.env.PORT ?? 3001);

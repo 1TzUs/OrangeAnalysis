@@ -2,9 +2,12 @@
 """RapidOCR 文本识别服务：常驻进程，接收图片路径+裁剪框，返回带坐标的文本。
 用法: python ocr_service.py [port]
 请求: POST /ocr  JSON: {"image": <abs path>, "x0":..,"y0":..,"x1":..,"y1":.., "scale": int}
-返回: {"lines":[{"text":..,"x0":..,"y0":..,"x1":..,"y1":..,"conf":..}]}
+       POST /ocr/batch  JSON: {"image": <abs path>, "regions":[{"tag":..,"x0":..,"y0":..,"x1":..,"y1":..,"scale":int}]}
+返回: {"lines":[...]}
+      /ocr/batch 返回 {"results":{tag:[lines]}}
 """
 import json
+import os
 import sys
 import threading
 from collections import OrderedDict
@@ -12,6 +15,9 @@ import numpy as np
 import cv2
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from rapidocr_onnxruntime import RapidOCR
+
+# 可选请求日志：设环境变量 OCR_VERBOSE=1 时打印每次请求的类型与区域数，便于统计识图调用次数
+_VERBOSE = os.environ.get('OCR_VERBOSE') == '1'
 
 _ocr = None
 _ocr_lock = threading.Lock()
@@ -51,7 +57,31 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    def _ocr_region(self, img, x0, y0, x1, y1, scale):
+        """对单区域做 OCR，返回带原图坐标的文本行列表（scale 会换算回原图坐标）。"""
+        scale = float(scale or 1.0)
+        h, w = img.shape[:2]
+        x0 = max(0, min(int(x0), w)); x1 = max(x0, min(int(x1), w))
+        y0 = max(0, min(int(y0), h)); y1 = max(y0, min(int(y1), h))
+        crop = img[y0:y1, x0:x1]
+        if scale != 1.0:
+            crop = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        result, _ = get_ocr()(crop)
+        lines = []
+        if result:
+            for box, text, conf in result:
+                xs = [p[0] for p in box]; ys = [p[1] for p in box]
+                lines.append({
+                    'text': text,
+                    'x0': int(min(xs) / scale + x0), 'y0': int(min(ys) / scale + y0),
+                    'x1': int(max(xs) / scale + x0), 'y1': int(max(ys) / scale + y0),
+                    'conf': float(conf),
+                })
+        return lines
+
     def do_POST(self):
+        if _VERBOSE:
+            print(f"[ocr] path={self.path}", flush=True)
         try:
             length = int(self.headers.get('Content-Length', 0))
             body = json.loads(self.rfile.read(length))
@@ -60,26 +90,24 @@ class Handler(BaseHTTPRequestHandler):
             if img is None:
                 self._send({'error': 'cannot read ' + img_path})
                 return
-            x0 = int(body.get('x0', 0)); y0 = int(body.get('y0', 0))
-            x1 = int(body.get('x1', img.shape[1])); y1 = int(body.get('y1', img.shape[0]))
-            scale = float(body.get('scale', 1.0))
-            h, w = img.shape[:2]
-            x0 = max(0, min(x0, w)); x1 = max(x0, min(x1, w))
-            y0 = max(0, min(y0, h)); y1 = max(y0, min(y1, h))
-            crop = img[y0:y1, x0:x1]
-            if scale != 1.0:
-                crop = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-            result, _ = get_ocr()(crop)
-            lines = []
-            if result:
-                for box, text, conf in result:
-                    xs = [p[0] for p in box]; ys = [p[1] for p in box]
-                    lines.append({
-                        'text': text,
-                        'x0': int(min(xs) / scale + x0), 'y0': int(min(ys) / scale + y0),
-                        'x1': int(max(xs) / scale + x0), 'y1': int(max(ys) / scale + y0),
-                        'conf': float(conf),
-                    })
+            # 批量路径：一次请求识别多个区域，省掉逐区域 HTTP 往返；region 内标签原样返回。
+            if self.path.rstrip('/').endswith('/ocr/batch'):
+                regions = body.get('regions', [])
+                if _VERBOSE:
+                    print(f"[ocr] batch regions={[r.get('tag') for r in regions]}", flush=True)
+                results = {}
+                for r in regions:
+                    tag = r.get('tag', '')
+                    results[tag] = self._ocr_region(
+                        img, r.get('x0', 0), r.get('y0', 0),
+                        r.get('x1', img.shape[1]), r.get('y1', img.shape[0]),
+                        r.get('scale', 1.0))
+                self._send({'results': results})
+                return
+            lines = self._ocr_region(
+                img, body.get('x0', 0), body.get('y0', 0),
+                body.get('x1', img.shape[1]), body.get('y1', img.shape[0]),
+                body.get('scale', 1.0))
             self._send({'lines': lines})
         except Exception as e:
             self._send({'error': str(e)})

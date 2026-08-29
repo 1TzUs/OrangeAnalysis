@@ -6,7 +6,7 @@
  * 相比逐面板裁剪，整图 OCR + 结果锚点分组对面板边界不敏感，更稳健。
  */
 import sharp from 'sharp';
-import { ocrImage, ocrRegionService, OcrLine } from './ocrService.js';
+import { ocrImage, ocrRegionsBatch, ocrRegionService, OcrLine, OcrRegion } from './ocrService.js';
 import { matchGeneral } from './match.js';
 import { countRedForGeneral } from './red.js';
 
@@ -154,6 +154,12 @@ export function cleanAlliance(raw: string): string {
 
 /**
  * 解析单张战报截图。
+ *
+ * 效率优化（两阶段）：
+ * 阶段1 只用整图 OCR 结果做纯计算，把「需要高倍识别」的区域（武将带补全、
+ *       同盟名精修）收集成请求列表，但暂不调用 OCR；
+ * 阶段2 一次性批量请求这些区域（合并 HTTP 往返，见 /ocr/batch），
+ *       再应用结果 —— 避免了原实现「每个战斗都无条件发一次高倍 OCR」的重复检测。
  * @param imagePath 图片绝对路径
  */
 export async function parseBattleImage(imagePath: string): Promise<ParseResult> {
@@ -162,14 +168,14 @@ export async function parseBattleImage(imagePath: string): Promise<ParseResult> 
   const H = meta.height!;
   const cx = Math.round(W / 2);
 
-  // 1) 整图 OCR，定位所有文本行
+  // 阶段0：整图一次 OCR，定位所有文本行
   const allLines = await ocrImage(imagePath, 1.3);
 
-  // 2) 结果锚点：大字「胜/败/平」
+  // 结果锚点：大字「胜/败/平」
   const fontH = Math.round(H * 0.1);
   const anchors = allLines.filter((l) => isResultGlyph(l, fontH)).sort((a, b) => a.y0 - b.y0);
 
-  // 3) 若找不到结果锚点，退化为整图仅一个战斗
+  // 若找不到结果锚点，退化为整图仅一个战斗
   const centers = anchors.length
     ? anchors.map((a) => (a.y0 + a.y1) / 2)
     : [H / 2];
@@ -181,14 +187,27 @@ export async function parseBattleImage(imagePath: string): Promise<ParseResult> 
     battleRanges.push({ y0: top, y1: bot });
   }
 
+  // 需要高倍 OCR 的区域任务：批量合并后一次发送
+  interface RegionJob {
+    region: OcrRegion;
+    kind: 'alli' | 'band';
+    idx: number;
+    side?: 'left' | 'right';
+    box?: { x0: number; y0: number; x1: number; y1: number };
+  }
+  const jobs: RegionJob[] = [];
   const battles: Battle[] = [];
+
+  // 阶段1：纯计算收集区域需求
   for (let i = 0; i < battleRanges.length; i++) {
     const range = battleRanges[i];
     const anchor = anchors[i];
 
-    // 完整战斗判定：顶部被 UI 导航栏截断/占位（如从列表中间截图）时，
-    // 该战斗同盟名被截到图外，无法可靠识别，整场剔除。
+    // 完整战斗判定：顶部被 UI 导航栏截断/占位时同盟名被截到图外，整场剔除
     if (isTopTruncated(allLines, range, anchor)) continue;
+
+    // 阶段2 按 battles 实际下标回写；前面可能被 continue 跳过的战斗不会计入，故用 battles.length 而非循环下标 i
+    const idx = battles.length;
 
     const battle: Battle = {
       leftGenerals: [],
@@ -204,6 +223,23 @@ export async function parseBattleImage(imagePath: string): Promise<ParseResult> 
       panel: { y0: range.y0, y1: range.y1 },
     };
 
+    // ---- 武将带：结果字下方约 80px 区域 ----
+    const genTop = anchor ? Math.max(0, anchor.y1 - 15) : range.y0;
+    const genBot = Math.min(H, genTop + 80);
+    if (genBot > genTop) {
+      // 先用整图 OCR 行在该区域直接提取武将/兵力/体力（零额外检测）
+      const bandLines = allLines.filter((l) => l.y0 >= genTop && l.y0 < genBot);
+      classifyGeneralBand(bandLines, cx, battle);
+      // 仅当某侧武将不足 3 名时才触发高倍补全（多数整图已可识全，省掉一次高倍 det）
+      if (battle.leftGenerals.length < 3 || battle.rightGenerals.length < 3) {
+        jobs.push({
+          region: { tag: `band${i}`, x0: 0, y0: genTop, x1: W, y1: genBot, scale: 2 },
+          kind: 'band',
+          idx,
+        });
+      }
+    }
+
     // ---- 结果 ----
     if (anchor) {
       battle.resultText = anchor.text.trim();
@@ -212,42 +248,21 @@ export async function parseBattleImage(imagePath: string): Promise<ParseResult> 
         : 'unknown';
     }
 
-    // ---- 武将带：结果字下方约 80px 区域，做高倍 OCR ----
-    // 起点略高于结果字下沿，避免漏掉紧贴结果字的兵力值
-    const genTop = anchor ? Math.max(0, anchor.y1 - 15) : range.y0;
-
     // ---- 同盟名：战斗顶部区域（range.y0 ~ 武将带顶）----
-    // 由 extractTopInfo 依据"盟"徽标定位同盟名行（同盟名行旁通常带独立"盟"徽标）。
     const allianceBand = allLines.filter((l) => l.y0 >= range.y0 && l.y0 < genTop);
     const alliLines = extractTopInfo(allianceBand, cx);
-    // 同盟名：整图 OCR 通常已准确；仅在末尾含疑似粘连噪声字（如"剑来画"的"画"）
-    // 时才对同盟行区域做高倍 OCR 还原，避免对高分辨率图造成丢字回归。
-    battle.leftAlliance = alliLines.left
-      ? needAllianceRefine(alliLines.left.text)
-        ? await refineAlliance(imagePath, alliLines.left)
-        : cleanAlliance(alliLines.left.text)
-      : '';
-    battle.rightAlliance = alliLines.right
-      ? needAllianceRefine(alliLines.right.text)
-        ? await refineAlliance(imagePath, alliLines.right)
-        : cleanAlliance(alliLines.right.text)
-      : '';
-
-    const genBot = Math.min(H, genTop + 80);
-    if (genBot > genTop) {
-      const bandLines = await ocrRegionService(
-        imagePath,
-        { x0: 0, y0: genTop, x1: W, y1: genBot },
-        2
-      );
-      classifyGeneralBand(bandLines, cx, battle);
-      // 识别每个武将上方的勾玉数量（红度）
-      await fillRed(imagePath, battle);
+    for (const side of ['left', 'right'] as const) {
+      const line = alliLines[side];
+      if (needAllianceRefine(line ? line.text : '')) {
+        const box = allianceRefineBox(line!);
+        jobs.push({ region: { tag: `alli${i}:${side}`, ...box, scale: 2 }, kind: 'alli', idx, side, box });
+        battle[side === 'left' ? 'leftAlliance' : 'rightAlliance'] = cleanAlliance(line!.text);
+      } else {
+        battle[side === 'left' ? 'leftAlliance' : 'rightAlliance'] = cleanAlliance(line ? line.text : '');
+      }
     }
 
-    // ---- 战报时间：位于战斗面板顶部（右上角，与"空地坐标/进攻/防守第X场"同行），
-    // 即结果字【上方】区域。区间取本场顶部边界（上一场与当前结果字中点附近）到结果字上方，
-    // 从中挑离结果字最近的一条时间行（同一行右上角）；未识别则保持空串。
+    // ---- 战报时间：结果字上方区域挑离结果字最近的一条时间行 ----
     const timeLo = Math.max(0, range.y0 - 8);
     const timeLine = allLines
       .filter((l) => l.y0 >= timeLo && l.y0 < genTop)
@@ -256,6 +271,25 @@ export async function parseBattleImage(imagePath: string): Promise<ParseResult> 
     if (timeLine) battle.time = extractTime(timeLine.text);
 
     battles.push(battle);
+  }
+
+  // 阶段2：批量高倍识别（一次请求），再应用结果
+  const batch = await ocrRegionsBatch(imagePath, jobs.map((j) => j.region));
+  for (const job of jobs) {
+    const battle = battles[job.idx];
+    const lines = batch[job.region.tag] ?? [];
+    if (job.kind === 'alli' && job.box) {
+      const refined = pickRefinedAlliance(lines, job.box);
+      if (refined) battle[job.side === 'left' ? 'leftAlliance' : 'rightAlliance'] = refined;
+    } else if (job.kind === 'band') {
+      // 高倍补全结果合并（classifyGeneralBand 内部会按名去重）
+      classifyGeneralBand(lines, cx, battle);
+    }
+  }
+
+  // 对每场战斗识别武将红度（纯像素连通域，非 OCR）
+  for (const b of battles) {
+    await fillRed(imagePath, b);
   }
 
   return { imageWidth: W, imageHeight: H, battles };
@@ -313,34 +347,35 @@ function extractTopInfo(lines: OcrLine[], cx: number): {
  * 才需要对该区域单独高倍识别；否则信任整图 OCR 结果。
  */
 const ALLIANCE_NOISE_SUFFIX = new Set(['画', '盟', '盈', '文', '反', '入', '占', '面', '明', '飞']);
+// 前缀噪声字：整图 OCR 有时把同盟名左侧的淡字/装饰粘连成首字（如"宇宙洪荒"读成"博宇宙洪荒"）。
+// 命中时触发高倍精修重新读取（精修读回原样即保留，不会误删真实以该字开头的同盟名）。
+const ALLIANCE_NOISE_PREFIX = new Set(['博']);
 export function needAllianceRefine(raw: string): boolean {
   const t = cleanAlliance(raw);
   if (!t) return false;
-  const last = [...t].pop()!;
-  return ALLIANCE_NOISE_SUFFIX.has(last);
+  const len = [...t].length;
+  const first = [...t][0]!;
+  const last = [...t][len - 1]!;
+  return ALLIANCE_NOISE_PREFIX.has(first) || ALLIANCE_NOISE_SUFFIX.has(last);
 }
 
 /**
- * 对同盟名所在区域做高倍 OCR，修正整图 OCR 的粘连误识别（如"剑来"→"剑来画"）。
- * @param imagePath 图片路径
- * @param line 整图 OCR 识别出的同盟名行（含 bbox）
+ * 同盟名高倍识别区域框：放大覆盖同盟名及其右侧可能的徽标粘连。
  */
-export async function refineAlliance(imagePath: string, line: OcrLine | null): Promise<string> {
-  if (!line) return '';
-  // 放大染色区域，覆盖同盟名及其右侧可能的徽标粘连
-  const box = {
+export function allianceRefineBox(line: OcrLine): { x0: number; y0: number; x1: number; y1: number } {
+  return {
     x0: Math.max(0, line.x0 - 8),
     y0: Math.max(0, line.y0 - 4),
     x1: line.x1 + 16,
     y1: line.y1 + 4,
   };
-  let hi: OcrLine[] = [];
-  try {
-    hi = await ocrRegionService(imagePath, box, 2);
-  } catch {
-    return cleanAlliance(line.text);
-  }
-  // 选与同盟行 y 重叠、非数字、非单字、非结果/底部信息的行中最下方一条
+}
+
+/**
+ * 从同盟名高倍识别结果中挑选候选行。
+ * 选与同盟行区域 y 重叠、非数字、非单字、非结果/底部信息的行中最下方一条。
+ */
+export function pickRefinedAlliance(hi: OcrLine[], box: { x0: number; y0: number; x1: number; y1: number }): string {
   const cands = hi
     .filter((l) => {
       const t = l.text.trim();
@@ -350,7 +385,24 @@ export async function refineAlliance(imagePath: string, line: OcrLine | null): P
       return Math.min(l.y1, box.y1) - Math.max(l.y0, box.y0) > 0;
     })
     .sort((a, b) => b.y0 - a.y0);
-  return cleanAlliance(cands.length ? cands[0].text : line.text);
+  return cleanAlliance(cands.length ? cands[0].text : '');
+}
+
+/**
+ * 对同盟名所在区域做高倍 OCR，修正整图 OCR 的粘连误识别（如"剑来"→"剑来画"）。
+ * @param imagePath 图片路径
+ * @param line 整图 OCR 识别出的同盟名行（含 bbox）
+ */
+export async function refineAlliance(imagePath: string, line: OcrLine | null): Promise<string> {
+  if (!line) return '';
+  const box = allianceRefineBox(line);
+  let hi: OcrLine[] = [];
+  try {
+    hi = await ocrRegionService(imagePath, box, 2);
+  } catch {
+    return cleanAlliance(line.text);
+  }
+  return pickRefinedAlliance(hi, box) || cleanAlliance(line.text);
 }
 
 /** 分类武将带：提取武将名/兵力/体力，按左右归入战斗 */
