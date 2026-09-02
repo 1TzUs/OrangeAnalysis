@@ -12,7 +12,7 @@ import { parsePortraitImage } from './recognizer-portrait.js';
 import { battleToRecords, appendRecords, loadRecords, clearRecords, importRecords, saveRecords, mergeRecords, BattleRecord } from './store.js';
 import { analyze } from './analysis.js';
 import { fetchRecords, pushRecords, clearRemote } from './cloud.js';
-import { getGenerals, getVersion, getCount, checkGeneralsUpdate } from './generals.js';
+import { getGenerals, getVersion, getCount, getSeason, checkGeneralsUpdate } from './generals.js';
 
 // 清空云端等危险操作的口令（仅存于服务端比对，不下发前端）
 const CLOUD_PASSWORD = 'orange';
@@ -173,9 +173,9 @@ app.post('/api/records/import', (req, res) => {
   }
 });
 
-/** 获取当前生效的武将名单（含版本与数量，供前端展示/排查） */
+/** 获取当前生效的武将名单（含版本、赛季与数量，供前端展示/排查） */
 app.get('/api/generals', (_req, res) => {
-  res.json({ generals: getGenerals(), version: getVersion(), count: getCount() });
+  res.json({ generals: getGenerals(), version: getVersion(), season: getSeason(), count: getCount() });
 });
 
 /** 检查并更新武将名单：从 GitHub 拉取远程名单，校验后热替换 + 持久化 */

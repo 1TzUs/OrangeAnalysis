@@ -11,7 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GENERALS } from './dict.js';
+import { GENERAL_LIST } from './generals-data.js';
 
 // 模块目录：ESM 下用 import.meta.url；被打包为 CJS(exe) 时 import.meta 无 url，回退到 exe 所在目录
 const __dirname = (() => {
@@ -58,8 +58,8 @@ interface GeneralFile {
   generals?: unknown;
 }
 
-let currentList: string[] = GENERALS;
-let currentVersion = '';
+let currentList: string[] = GENERAL_LIST.generals;
+let currentVersion = GENERAL_LIST.version;
 
 /** 读取当前生效的武将名单 */
 export function getGenerals(): string[] {
@@ -116,17 +116,34 @@ interface UpdateResult {
   error?: string;
 }
 
-/** 版本号比较：按 . / - 切分的数字段从高位到低位比较（如 2026-08-28 > 2026-08-27） */
-function cmpVersion(a: string, b: string): number {
-  const pa = a.split(/[.\-/]/).map((x) => parseInt(x, 10));
-  const pb = b.split(/[.\-/]/).map((x) => parseInt(x, 10));
-  const len = Math.max(pa.length, pb.length);
-  for (let i = 0; i < len; i++) {
-    const na = Number.isNaN(pa[i]) ? 0 : pa[i];
-    const nb = Number.isNaN(pb[i]) ? 0 : pb[i];
-    if (na !== nb) return na - nb;
+/** 当前生效名单的赛季号：解析自版本号（sN-YYYY-MM-DD），无赛季/无效时为 null */
+export function getSeason(): number | null {
+  const { season } = parseVersion(currentVersion);
+  return season >= 1 ? season : null;
+}
+
+/** 解析版本串为 {赛季号, 日期时间戳}。支持新格式 sN-YYYY-MM-DD，兼容旧纯日期 YYYY-MM-DD（视为初始赛季 0）；无效返回赛季 -1 */
+function parseVersion(v: string): { season: number; date: number } {
+  const s = (v ?? '').trim();
+  const m = /^s(\d+)-(\d{4}-\d{2}-\d{2})$/.exec(s);
+  if (m) {
+    const date = Date.parse(m[2]);
+    return { season: parseInt(m[1], 10), date: Number.isNaN(date) ? 0 : date };
   }
-  return 0;
+  const d = /^(\d{4}-\d{2}-\d{2})$/.exec(s);
+  if (d) {
+    const date = Date.parse(d[1]);
+    return { season: 0, date: Number.isNaN(date) ? 0 : date }; // 旧纯日期视为赛季 0
+  }
+  return { season: -1, date: 0 }; // 无效版本视为最低优先级
+}
+
+/** 版本号比较：先比赛季号，同赛季再比日期（如 s15-2026-08-28 > s15-2026-08-27；旧纯日期赛季 0 低于任何 sN） */
+function cmpVersion(a: string, b: string): number {
+  const pa = parseVersion(a);
+  const pb = parseVersion(b);
+  if (pa.season !== pb.season) return pa.season - pb.season;
+  return pa.date - pb.date;
 }
 
 /** 检查并应用远程名单更新：拉取 → 校验 → 热替换 + 持久化。失败时保留现有名单。 */
@@ -172,10 +189,9 @@ export async function checkGeneralsUpdate(): Promise<UpdateResult> {
   // 选版本号最高者；版本相同时取镜像顺序靠前者（稳定排序）
   cands.sort((a, b) => cmpVersion(b.version, a.version) || 0);
   const chosen = cands[0];
-  // 无变化（版本与内容均一致）则跳过
-  const sameVersion = chosen.version === currentVersion;
-  const sameList = chosen.list.join(',') === currentList.join(',');
-  if (sameVersion && sameList) {
+  // 仅当远程版本严格「高于」当前生效版本时才升级。引入赛季版本后，新格式 sN-YYYY-MM-DD 可能
+  // 在数字上高于/低于旧纯日期格式，若远程为不如当前（如旧格式降级源），应保留现有，避免被覆盖。
+  if (cmpVersion(chosen.version, currentVersion) <= 0) {
     return { updated: false, version: currentVersion, count: currentList.length, source: chosen.source };
   }
   // 应用并持久化

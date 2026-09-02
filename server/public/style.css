@@ -1127,6 +1127,59 @@ body {
   border-radius: 14px;
   padding: 20px 22px;
 }
+/* 标识体系：可展开/收起的抽屉卡片 */
+.collapse-card {
+  padding: 0;
+  overflow: hidden;
+}
+.collapse-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 22px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.collapse-head::-webkit-details-marker,
+.collapse-head::marker { display: none; }
+.collapse-head .settings-title { margin-bottom: 0; }
+.collapse-arrow {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+.collapse-arrow::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 7px;
+  height: 7px;
+  border-right: 1.6px solid currentColor;
+  border-bottom: 1.6px solid currentColor;
+  transform: rotate(-45deg); /* 收起时指向右 */
+  transition: transform 0.2s ease;
+}
+.collapse-card[open] .collapse-arrow::before { transform: rotate(45deg); } /* 展开时指向下 */
+.collapse-body {
+  padding: 2px 14px 14px;
+}
+.collapse-section {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+}
+.collapse-section:first-child { margin-top: 4px; }
+.collapse-section .settings-desc { margin-bottom: 14px; }
+
 .settings-title {
   font-size: 16px;
   color: var(--accent-2);
@@ -1222,6 +1275,16 @@ body {
   color-scheme: dark;
 }
 .setting-field input[type="number"]::placeholder { color: var(--text-dim); }
+.generals-version {
+  padding: 8px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text);
+  font-size: 14px;
+  min-width: 150px;
+  font-variant-numeric: tabular-nums;
+}
 .setting-hint {
   font-size: 11px;
   color: var(--text-dim);

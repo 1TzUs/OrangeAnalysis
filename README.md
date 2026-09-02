@@ -61,7 +61,7 @@ three/
    │  ├─ ocrService.ts    # OCR HTTP 客户端（/ocr、/ocr/batch）
    │  ├─ red.ts           # 红度（勾玉）识别
    │  ├─ match.ts         # 武将模糊匹配 + OCR 错字映射
-   │  ├─ dict.ts          # 内置武将词典（兜底）
+   │  ├─ generals-data.ts # 内置武将名单（兜底，含赛季版本）
    │  ├─ generals.ts      # 武将名单自动更新
    │  ├─ cloud.ts         # 云端数据同步（JSONBin.io）
    │  ├─ store.ts         # 本地持久化与去重合并
@@ -123,8 +123,9 @@ npm run start          # 生产/普通模式
 
 ## 武将名单自动更新
 
-- 名单源为 GitHub 上的 `generals.json`，形如 `{ "version": "2026-08-27", "generals": ["曹丕", ...] }`。
-- 每次打开网页后端会检查远程名单；版本号更高则热替换并持久化，前端弹出版本更新提示。
+- 名单源为 GitHub 上的 `generals.json`，形如 `{ "version": "s16-2026-09-01", "generals": ["曹丕", ...] }`，版本以「赛季 + 日期」标识（新武将随赛季发布）。
+- 每次打开网页后端会检查远程名单；版本更高则热替换并持久化，前端弹出更新提示。
+- 设置页「武将名单」卡片显示当前生效**赛季**（如 `S16`）。
 - 内置多镜像源以应对网络问题；也可通过 `GENERALS_RAW_URL` 覆盖。
 - 新武将若存在 OCR 易错的形近字，需在 `server/src/match.ts` 的 `OCR_ALIASES` 中补充映射。
 
@@ -142,7 +143,7 @@ npm run start          # 生产/普通模式
 
 ## 打包发布
 
-项目支持使用 `@yao-pkg/pkg` 打包为自包含可执行文件（内置 Node 运行时与 `sharp`/ONNX 等原生依赖），免安装即可运行。`start.bat` / `stop.bat` 分别用于一键启动和清理进程并释放端口。详见 `技术文档.md`。
+项目支持使用 `@yao-pkg/pkg` 打包为自包含可执行文件（内置 Node 运行时与 `sharp`/ONNX 等原生依赖），免安装即可运行。`start.bat` 一键启动 Web + OCR 并自动打开浏览器（Ctrl+C 停止、窗口自动关闭）。详见 `技术文档.md`。
 
 ## 相关文档
 

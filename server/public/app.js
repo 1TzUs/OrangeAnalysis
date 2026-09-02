@@ -988,8 +988,30 @@
     .then((res) => res.json())
     .then((r) => {
       if (r && r.updated && r.version) {
-        openAlert(`武将名单已更新至 v${r.version}`);
+        openAlert(`武将名单已更新至 ${r.version}`);
       }
+      // 更新设置页展示的当前名单赛季
+      refreshGeneralsInfo();
     })
-    .catch(() => { /* 网络/服务异常时静默，沿用现有名单 */ });
+    .catch(() => {
+      // 网络/服务异常时静默；仍刷新一次赛季展示（沿用现有生效名单）
+      refreshGeneralsInfo();
+    });
+
+  /**
+   * 刷新设置页「武将名单」卡片：展示当前生效名单的赛季号。
+   * 无赛季（内置名单兜底/旧未标赛季版本）时显示「内置默认」，不在设置页报错。
+   */
+  function refreshGeneralsInfo() {
+    fetch('/api/generals')
+      .then((res) => res.json())
+      .then((g) => {
+        const vEl = document.getElementById('generals-version');
+        if (vEl) vEl.textContent = g && Number.isInteger(g.season) && g.season >= 1 ? `S${g.season}` : '内置默认';
+      })
+      .catch(() => {
+        const vEl = document.getElementById('generals-version');
+        if (vEl) vEl.textContent = '无法获取';
+      });
+  }
 })();
