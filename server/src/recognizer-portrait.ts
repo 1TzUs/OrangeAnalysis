@@ -233,8 +233,11 @@ export async function parsePortraitImage(imagePath: string): Promise<ParseResult
       const tmp = { leftGenerals: [], rightGenerals: [] } as unknown as Battle;
       classifyGeneralBand(hi, cx, tmp);
       for (const s of job.sides) {
-        battle[s === 'left' ? 'leftGenerals' : 'rightGenerals'] =
-          tmp[s === 'left' ? 'leftGenerals' : 'rightGenerals'];
+        const rebuilt = tmp[s === 'left' ? 'leftGenerals' : 'rightGenerals'];
+        // 空结果护栏：high-res 该侧未识别出任何武将时，保留整图已识出的结果，避免误清空
+        if (rebuilt.length) {
+          battle[s === 'left' ? 'leftGenerals' : 'rightGenerals'] = rebuilt;
+        }
       }
     }
   }

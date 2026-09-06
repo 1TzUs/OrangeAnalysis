@@ -1,12 +1,14 @@
 /**
- * 武将名单动态源：支持从 GitHub 拉取并热替换识别词库。
+ * 武将名单动态源：支持从 GitHub 拉取并热替换识别词库，名单按「赛季 + 更新日期」版本化。
  *
  * 设计：
- *  1. GitHub 上维护一份 generals.json，形如 { "version": "2026-08-27", "generals": ["曹丕", ...] }。
- *  2. 后端启动时先读本地缓存 data/generals.json；没有则回退到 dict.ts 内置名单。
- *  3. 网页打开时前端调用 /api/generals/update，后端据此拉取远程、校验、持久化并热替换。
+ *  1. GitHub 仓库根目录维护一份 generals.json，形如 { "version": "s16-2026-09-01", "generals": ["曹丕", ...] }。
+ *     （版本号格式 s{赛季}-{YYYY-MM-DD}，三国武将随新赛季发布，见 generals-data.ts。）
+ *  2. 三级回退：远程 GitHub > 本地缓存 data/generals.json > 内置名单 generals-data.ts。
+ *  3. 后端启动时 loadLocal() 恢复本地缓存；网页打开时前端调用 /api/generals/update，
+ *     后端据此探测多个镜像拉取远程、校验、按版本号升级并热替换（低于当前版本则保留现有，防降级）。
  *
- * 安全性：仅接受中文 2~4 字的武将名，去重并限制数量，远程数据非法时保留现有名单不崩溃。
+ * 安全性：仅接受中文 2~4 字的武将名，去重并限制数量（MAX_GENERALS），远程数据非法时保留现有名单不崩溃。
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -31,7 +33,7 @@ const DATA_FILE = path.join(DATA_DIR, 'generals.json');
 
 /**
  * 名单源仓库常量（手动推送配置）：
- *   1. 将 server/generals.json 上传到你的 GitHub 仓库（OrangeAnalysis 的 master 分支）；
+ *   1. 将仓库根目录 generals.json 上传到你的 GitHub 仓库（OrangeAnalysis 的 master 分支）；
  *   2. 更新时同步修改下面 REPO 指向的 owner/repo 与 BRANCH；
  *   3. SUPPLY 名单靠下方 DEFAULT_MIRRORS 多镜像按序尝试，避免 raw.githubusercontent.com 被墙时拉取失败。
  * 也可用环境变量 GENERALS_RAW_URL 显式指定单个优先源（开发用，优先级最高）。

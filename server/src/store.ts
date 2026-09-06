@@ -77,21 +77,30 @@ function recordKey(r: BattleRecord): string {
   return `${r.alliance}|${r.comp}|${r.compReds.join(',')}|${r.hpAfter}|${r.hpBefore}|${r.battleTime}`;
 }
 
-/** 追加写入记录并立即落盘（自动去重） */
-export function appendRecords(records: BattleRecord[]): void {
-  if (!records.length) return;
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  const all = loadRecords();
-  const seen = new Set(all.map(recordKey));
+/**
+ * 按去重键合并：保留 base 全部记录，仅把 incoming 中去重键不重复的追加到尾部。
+ * @param base 作为去重基准的既有记录
+ * @param incoming 待追加的记录
+ * @returns { all 合并后的完整数组, added 实际新增的记录 }
+ */
+function mergeUnique(base: BattleRecord[], incoming: BattleRecord[]): { all: BattleRecord[]; added: BattleRecord[] } {
+  const seen = new Set(base.map(recordKey));
   const added: BattleRecord[] = [];
-  for (const r of records) {
+  for (const r of incoming) {
     const key = recordKey(r);
     if (seen.has(key)) continue;
     seen.add(key);
     added.push(r);
   }
+  return { all: [...base, ...added], added };
+}
+
+/** 追加写入记录并立即落盘（自动去重） */
+export function appendRecords(records: BattleRecord[]): void {
+  if (!records.length) return;
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const { all, added } = mergeUnique(loadRecords(), records);
   if (!added.length) return;
-  all.push(...added);
   cache = all;
   fs.writeFileSync(DATA_FILE, JSON.stringify(all, null, 2), 'utf-8');
 }
@@ -171,16 +180,9 @@ export function mergeRecords(
     if (n) cloudValid.push(n);
     else skipped++;
   }
-  const seen = new Set(cloudValid.map(recordKey));
-  const records = [...cloudValid];
-  let added = 0;
-  for (const r of local) {
-    if (seen.has(recordKey(r))) continue;
-    seen.add(recordKey(r));
-    records.push(r);
-    added++;
-  }
-  return { records, added, skipped };
+  // 云端记录整体保留（基准 + 去重键来源），仅并入本地新增，返回新增条数
+  const { all, added } = mergeUnique(cloudValid, local);
+  return { records: all, added: added.length, skipped };
 }
 
 /** 清空全部记录（用于测试/重置） */

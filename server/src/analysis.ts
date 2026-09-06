@@ -33,7 +33,7 @@ export interface CompStat {
   hot: boolean; // 是否「快速升温」：近 3h 新出现且出场占比达标
   hotCount: number; // 近 3h 出场场次
   whiteBoard: boolean; // 「白板之光」：按分段红度判定——最低红度段「0-5红」场次达标且该段胜率 ≥wbRate
-  truck: boolean; // 「泥头车」：胜率 >60%
+  truck: boolean; // 「泥头车」：场次 ≥truckMin 且胜率 ≥truckRate
   trap: boolean; // 「陷阱」：场次较多（≥trapMin）但胜率低于50%
 }
 
@@ -47,6 +47,7 @@ export interface MatrixCell {
 /** 分析结果 */
 export interface AnalysisResult {
   comps: CompStat[];     // 按胜率/场次排序的阵容列表
+  total: number;         // 当前筛选下参与统计的有效战斗场数
   matrix: {
     comps: string[];     // 矩阵行列阵容（按场次降序）
     cells: Record<string, Record<string, MatrixCell>>; // [row][col]
@@ -225,8 +226,8 @@ export function analyze(
       hotTotal > 0 &&
       he.count / hotTotal >= HOT_RATE
     );
-    // 「白板之光」：按分段红度判定——取最低红度段「0-5红」，该段场次达标且胜率 ≥ wbRate
-    const wbSeg = s.brackets['0-5红'];
+    // 「白板之光」：按分段红度判定——取最低红度段（0-5红），该段场次达标且胜率 ≥ wbRate
+    const wbSeg = s.brackets[STAR_BRACKETS[0].label];
     s.whiteBoard = wbSeg.total >= badge.wbMin && wbSeg.winRate >= badge.wbRate;
     // 「泥头车」：胜率 >= truckRate
     s.truck = s.total >= badge.truckMin && s.winRate >= badge.truckRate;

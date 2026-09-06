@@ -285,21 +285,21 @@
         </div>
       </div>
     </section>
-  </main>
 
-  <!-- 确认弹窗（替代原生 confirm，style 与主题一致）。放 main 直接子级，避免被任一 tab 面板的 hidden(display:none) 裁剪 -->
-  <div id="modal" class="modal-overlay hidden">
-    <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="modal-title">
-      <div class="modal-icon" id="modal-icon">⚠️</div>
-      <h3 class="modal-title" id="modal-title">确认操作</h3>
-      <p class="modal-msg" id="modal-msg"></p>
-      <input id="modal-input" class="modal-input" type="password" placeholder="请输入操作口令" autocomplete="off" hidden />
-      <div class="modal-actions">
-        <button type="button" class="btn btn-ghost" id="modal-cancel">取消</button>
-        <button type="button" class="btn btn-danger" id="modal-ok">确定</button>
+    <!-- 确认弹窗（替代原生 confirm，style 与主题一致）。放 main 直接子级（而非任一 tab 面板内），避免被某 tab 的 hidden(display:none) 裁剪 -->
+    <div id="modal" class="modal-overlay hidden">
+      <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="modal-icon" id="modal-icon">⚠️</div>
+        <h3 class="modal-title" id="modal-title">确认操作</h3>
+        <p class="modal-msg" id="modal-msg"></p>
+        <input id="modal-input" class="modal-input" type="password" placeholder="请输入操作口令" autocomplete="off" hidden />
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="modal-cancel">取消</button>
+          <button type="button" class="btn btn-danger" id="modal-ok">确定</button>
+        </div>
       </div>
     </div>
-  </div>
+  </main>
 
   <footer class="app-footer">
     <span>© 2026 欧润吉 All rights reserved</span>

@@ -87,7 +87,8 @@ function requestOcrBatch(payload: { image: string; regions: OcrRegion[] }): Prom
           try {
             const r = JSON.parse(d);
             if (r.error) return reject(new Error(r.error));
-            resolve(r.results as Record<string, OcrLine[]>);
+            // results 缺失（异常返回）时兜底为空映射，避免上层收到 undefined
+            resolve((r.results ?? {}) as Record<string, OcrLine[]>);
           } catch (e) {
             reject(e as Error);
           }

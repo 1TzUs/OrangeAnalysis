@@ -12,9 +12,18 @@
   --lose: #e05b5b;
   --win-bg: rgba(76, 175, 125, 0.12);
   --lose-bg: rgba(224, 91, 91, 0.12);
+  /* 全局深色调：原生控件（select/date/滚动条等）按深色渲染，移动端点击无默认高亮 */
+  color-scheme: dark;
+  -webkit-tap-highlight-color: transparent;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* 全局键盘焦点可见性；组件内部（如 toggle）可用更细的样式覆盖 */
+:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 2px;
+}
 
 body {
   font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
@@ -1272,7 +1281,6 @@ body {
   color: var(--text);
   font-size: 14px;
   min-width: 150px;
-  color-scheme: dark;
 }
 .setting-field input[type="number"]::placeholder { color: var(--text-dim); }
 .generals-version {
