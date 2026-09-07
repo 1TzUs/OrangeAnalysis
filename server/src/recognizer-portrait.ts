@@ -18,6 +18,7 @@ import {
   RESULT_CHARS,
   classifyGeneralBand,
   fillRed,
+  hasHp,
   needAllianceRefine,
   allianceRefineBox,
   pickRefinedAlliance,
@@ -184,12 +185,11 @@ export async function parsePortraitImage(imagePath: string): Promise<ParseResult
       const sideCands = cands.filter((l) => sideOf(l) === side);
       if (!sideCands.length) return { raw: '', line: null };
       const hp = hpOf(side);
-      const alliHit = hp
-        ? (sideCands.filter((c) => c.y0 < hp.y0).length
-            ? sideCands.filter((c) => c.y0 < hp.y0)
-            : sideCands
-          ).sort((a, b) => b.y0 - a.y0)[0]
-        : [...sideCands].sort((a, b) => b.y0 - a.y0)[0];
+      // 同盟名必须位于兵力行【上方】。若无兵力行，说明该侧战斗信息不完整
+      //（最底一场常被底部导航遮挡，只残留玩家名/武将名/导航词），此时不臆造同盟名，置空。
+      if (!hp) return { raw: '', line: null };
+      const above = sideCands.filter((c) => c.y0 < hp.y0);
+      const alliHit = (above.length ? above : sideCands).sort((a, b) => b.y0 - a.y0)[0];
       return { raw: cleanAlliance(alliHit.text), line: alliHit };
     };
 
@@ -247,5 +247,7 @@ export async function parsePortraitImage(imagePath: string): Promise<ParseResult
     await fillRed(imagePath, b);
   }
 
-  return { imageWidth: W, imageHeight: H, battles };
+  // 整体剔除双侧兵力都为空（缺少兵力数据，常为底部被导航遮挡截断）的战斗，避免污染统计
+  const validBattles = battles.filter(hasHp);
+  return { imageWidth: W, imageHeight: H, battles: validBattles };
 }

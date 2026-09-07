@@ -292,7 +292,19 @@ export async function parseBattleImage(imagePath: string): Promise<ParseResult> 
     await fillRed(imagePath, b);
   }
 
-  return { imageWidth: W, imageHeight: H, battles };
+  // 整体剔除双侧兵力都为空（缺少兵力数据）的战斗，避免污染统计
+  const validBattles = battles.filter(hasHp);
+  return { imageWidth: W, imageHeight: H, battles: validBattles };
+}
+
+/**
+ * 判定战斗是否带有效兵力：双侧任一侧有 x/y 兵力即视为有效。
+ * 用于剔除信息不完整的战斗（如被界面遮挡、无兵力数据的截图）。
+ * @param b 单场战斗
+ * @returns 是否有任一兵力
+ */
+export function hasHp(b: Battle): boolean {
+  return Boolean((b.leftHp || '').trim()) || Boolean((b.rightHp || '').trim());
 }
 
 /** 判断一行是否为"盟"徽标（同盟名旁的小字标识） */

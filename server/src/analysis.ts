@@ -57,7 +57,7 @@ export interface AnalysisResult {
 }
 
 /** 筛选判定：同盟精确相等 + 时间窗口 + 战前兵力下限；任一不满足则剔除 */
-function passFilter(r: BattleRecord, alliance: string, hours: number, minHp: number, now: number): boolean {
+export function passFilter(r: BattleRecord, alliance: string, hours: number, minHp: number, now: number): boolean {
   if (alliance && r.alliance !== alliance) return false;
   // 未识别战报时间（ts 为 null）的记录无法判定是否在时间范围内，按范围外处理
   if (hours > 0 && (r.ts == null || now - r.ts > hours * 3600 * 1000)) return false;
@@ -289,4 +289,71 @@ export function analyze(
     filters: { alliance, hours, minHp, minCount },
     generatedAt: records.length ? Date.now() : null,
   };
+}
+
+/** 单个日期的胜率走势数据点 */
+export interface TrendPoint {
+  day: string;     // 日期键，如 2026-09-07
+  total: number;   // 当日出场场次
+  wins: number;    // 当日胜场
+  winRate: number; // 当日胜率（0-100）
+}
+
+/** 阵容走势结果 */
+export interface TrendResult {
+  comp: string;
+  days: number;              // 统计天数
+  points: TrendPoint[];      // 按日期升序（最早在前）
+}
+
+/** 将时间戳转为本地日期键（yyyy-mm-dd） */
+function dayKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * 计算某阵容近 N 天的逐日出场 / 胜率走势。
+ * 复用 passFilter（同盟/时间/兵力），仅统计 ts 有效、任一侧武将 >=3 的记录，
+ * 超出统计窗口首尾之外的日期忽略。不涉及徽标 / 快速升温 / 矩阵判定。
+ * @param records 全部战斗记录
+ * @param comp 目标阵容（三个武将按名排序，/ 分隔）
+ * @param opts alliance 同盟名 / hours 时间窗 / minHp 兵力下限 / days 统计天数（默认 14）
+ * @returns 走势结果，points 按日期升序，无命中数据时各天 total 为 0
+ */
+export function trendFor(
+  records: BattleRecord[],
+  comp: string,
+  opts: { alliance?: string; hours?: number; minHp?: number; days?: number } = {},
+): TrendResult {
+  const now = Date.now();
+  const days = Math.max(1, opts.days || 14);
+  const alliance = opts.alliance ?? '';
+  const hours = opts.hours || 0;
+  const minHp = opts.minHp || 0;
+
+  // 构造近 days 天的日期序列（升序：最早在前）
+  const keys: string[] = [];
+  const map = new Map<string, { total: number; wins: number }>();
+  for (let i = days - 1; i >= 0; i--) {
+    const k = dayKey(new Date(now - i * 86400000));
+    keys.push(k);
+    map.set(k, { total: 0, wins: 0 });
+  }
+
+  for (const r of records) {
+    if (r.ts == null) continue;                           // 未识别时间不参与走势
+    if (r.comp !== comp) continue;                        // 只统计目标阵容
+    if (r.comp.split('/').length < 3) continue;           // 任一侧武将 <3 剔除，与 analyze 口径一致
+    if (!passFilter(r, alliance, hours, minHp, now)) continue;
+    const c = map.get(dayKey(new Date(r.ts)));
+    if (!c) continue;                                     // 超出窗口日期的记录忽略
+    c.total++;
+    if (r.result === 'win') c.wins++;
+  }
+
+  const points: TrendPoint[] = keys.map((k) => {
+    const c = map.get(k)!;
+    return { day: k, total: c.total, wins: c.wins, winRate: rate(c.wins, c.total) };
+  });
+  return { comp, days, points };
 }

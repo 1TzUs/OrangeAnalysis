@@ -9,8 +9,8 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseBattleImage } from './recognizer.js';
 import { parsePortraitImage } from './recognizer-portrait.js';
-import { battleToRecords, appendRecords, loadRecords, clearRecords, importRecords, saveRecords, mergeRecords, BattleRecord } from './store.js';
-import { analyze } from './analysis.js';
+import { battleToRecords, appendRecords, loadRecords, clearRecords, deleteAllianceRecords, importRecords, saveRecords, mergeRecords } from './store.js';
+import { analyze, trendFor } from './analysis.js';
 import { fetchRecords, pushRecords, clearRemote } from './cloud.js';
 import { getGenerals, getVersion, getCount, getSeason, checkGeneralsUpdate } from './generals.js';
 
@@ -147,6 +147,26 @@ app.get('/api/analyze', (req, res) => {
   }
 });
 
+/** 阵容走势接口：某阵容近 N 天逐日出场 / 胜率，筛选口径与 /api/analyze 一致 */
+app.get('/api/analyze/trend', (req, res) => {
+  try {
+    const { comp = '', alliance = '', hours = 0, minHp = 0, days = 14 } = req.query;
+    if (!comp) {
+      res.status(400).json({ error: '缺少参数 comp' });
+      return;
+    }
+    const result = trendFor(loadRecords(), String(comp), {
+      alliance: String(alliance),
+      hours: Number(hours),
+      minHp: Number(minHp),
+      days: Number(days),
+    });
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
 /** 获取全部原始战斗记录（供前端展示/调试） */
 app.get('/api/records', (_req, res) => {
   res.json({ items: loadRecords() });
@@ -192,6 +212,14 @@ app.get('/api/generals/update', async (_req, res) => {
 app.post('/api/records/clear', (_req, res) => {
   clearRecords();
   res.json({ ok: true, count: 0 });
+});
+
+/** 删除指定同盟的全部战报（按同盟精确匹配，不可撤销） */
+app.post('/api/records/clear-alliance', (req, res) => {
+  const alliance = (req.body?.alliance ?? '').trim();
+  if (!alliance) return res.status(400).json({ error: '缺少同盟名' });
+  const removed = deleteAllianceRecords(alliance);
+  res.json({ ok: true, removed });
 });
 
 /** 云端：从 JSONBin.io 拉取记录并【覆盖】本地数据。Key 仅存于服务端，不透传前端 */

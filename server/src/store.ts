@@ -192,6 +192,24 @@ export function clearRecords(): void {
   fs.writeFileSync(DATA_FILE, JSON.stringify([], null, 2), 'utf-8');
 }
 
+/**
+ * 删除指定同盟的全部记录（按同盟精确匹配）。
+ * 该操作不可撤销；无匹配记录时不写盘。
+ * @param alliance 要删除的同盟名
+ * @returns 实际删除的记录条数
+ */
+export function deleteAllianceRecords(alliance: string): number {
+  const list = loadRecords();
+  const kept = list.filter((r) => r.alliance !== alliance);
+  const removed = list.length - kept.length;
+  if (removed > 0) {
+    cache = kept;
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(DATA_FILE, JSON.stringify(kept, null, 2), 'utf-8');
+  }
+  return removed;
+}
+
 /** 覆盖全部记录（云端拉取覆盖本地用）：直接替换内存缓存并写盘 */
 export function saveRecords(records: BattleRecord[]): void {
   cache = [...records];

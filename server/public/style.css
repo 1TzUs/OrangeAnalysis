@@ -91,6 +91,35 @@ body {
 /* 单色 SVG 图标通用尺寸 */
 .icon { width: 1em; height: 1em; display: inline-block; vertical-align: -0.125em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
 
+/* ==================== 滚动条 ====================
+   统一自制滚动条：半透明中性灰，不随深浅主题变化（避免切换主题时原生滚动条颜色硬跳）。
+   用固定 RGB 而非 CSS 变量，保证深/浅两套主题下保持一致。 */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(120, 130, 150, 0.4);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(120, 130, 150, 0.55);
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+/* Firefox (scrollbar-width + scrollbar-color) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 130, 150, 0.4) transparent;
+}
+
 /* ==================== 页头 ==================== */
 .app-header {
   position: relative;
@@ -129,6 +158,20 @@ body {
   margin-top: 2px;
   color: var(--text-dim);
   font-size: 13px;
+}
+
+/* ==================== 主题切换圆形扩散动画 ====================
+   观感：暗→亮 = 亮色圆从按钮向外扩散、盖住暗色；亮→暗 = 亮色圆向按钮回收、露出暗色。
+   过渡所需的所有关键样式（初始剪裁值、方向 class、@keyframes）由 app.js 在点击时
+   以具体像素动态注入 <style id="theme-transition-style">，这里只保留全局基线——
+   关闭默认的交叉淡入淡出，避免被盖住的那一层发生额外淡出。 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-image-pair(root) {
+  isolation: auto;
 }
 
 /* 主题切换按钮（页头右上角） */
@@ -470,6 +513,7 @@ body {
   left: 0;
   z-index: 30;
   min-width: 100%;
+  max-width: min(340px, calc(100vw - 32px)); /* 窄屏防御：避免菜单右缘溢出视口 */
   max-height: 280px;
   overflow-y: auto;
   padding: 6px;
@@ -500,9 +544,28 @@ body {
 .filter-group { display: flex; align-items: center; gap: 8px; }
 .filter-label { font-size: 14px; color: var(--text-dim); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.chip { padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border); background: var(--bg); color: var(--text-dim); font-size: 13px; cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; }
+.chip { position: relative; padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border); background: var(--bg); color: var(--text-dim); font-size: 13px; cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; }
 .chip:hover { color: var(--text); border-color: var(--accent); }
 .chip.active { border-color: var(--accent); background: var(--sel-bg); color: var(--sel-text); font-weight: 600; }
+/* 带删除按钮的 chip 右侧留位，避免删除钮压字 */
+.chip:has(.chip-x) { padding-right: 26px; }
+/* 删除按钮：右侧中间垂直居中的圆形小钮，常态克制；hover/聚焦呈现危险红，与 .btn-danger 视觉一致 */
+.chip-x {
+  display: inline-flex; align-items: center; justify-content: center;
+  position: absolute; top: 50%; right: 5px; transform: translateY(-50%);
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 1px solid transparent;
+  color: var(--text-dim); background: transparent;
+  opacity: 0.45; cursor: pointer; z-index: 2;
+  transition: color 0.15s, background 0.15s, opacity 0.15s, border-color 0.15s;
+}
+.chip-x .icon { width: 11px; height: 11px; }
+.chip:hover .chip-x, .chip.active .chip-x { opacity: 1; }
+.chip-x:hover, .chip-x:focus-visible {
+  opacity: 1; color: var(--lose);
+  background: var(--lose-bg); border-color: var(--lose);
+}
+.chip-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .switch-label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
 .switch-label input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
@@ -782,6 +845,67 @@ body {
 }
 /* 打开全屏时禁止底层页面滚动 */
 body.fs-lock { overflow: hidden; }
+/* 海报预览浮层：半透明遮罩 + 居中卡片，预览确认后再下载 */
+.poster-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.55);
+}
+.poster-preview.hidden { display: none; }
+.pp-card {
+  display: flex;
+  flex-direction: column;
+  max-width: min(92vw, 760px);
+  max-height: 90vh;
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+}
+.pp-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.pp-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.pp-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.pp-close .icon { width: 18px; height: 18px; }
+.pp-close:hover { color: var(--text); }
+.pp-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 14px 16px;
+  background: var(--bg);
+}
+.pp-body img { display: block; width: 100%; height: auto; border-radius: 6px; }
+.pp-foot {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
 .fs-head {
   flex: 0 0 auto;
   display: flex;
@@ -842,3 +966,160 @@ body.fs-lock { overflow: hidden; }
 
 /* 全屏内热力图图例（复用主页面配色） */
 .fs-legend { margin-left: auto; }
+
+/* ==================== 洞察页 ==================== */
+/* 顶部筛选工具条：复用 .analyze-toolbar 同款卡片容器，保持工具风一致 */
+.insight-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 12px;
+  column-gap: 16px;
+  align-items: center;
+  padding: 13px 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 18px;
+}
+.insight-toolbar .filter-group.alliance { flex: 1 1 auto; min-width: 0; }
+.insight-toolbar .filter-group:not(.alliance) { flex: 0 0 auto; }
+.insight-toolbar .toolbar-actions { margin-left: 12px; }
+
+/* 洞察内容：走势 + 克制两块并排；窄屏折行成单列 */
+.insight-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.insight-card {
+  padding: 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.insight-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.insight-title .icon { width: 18px; height: 18px; color: var(--accent); }
+.insight-desc { margin: 0 0 14px; font-size: 13px; color: var(--text-dim); }
+
+/* 阵容走势：内联 SVG 柱状图（参考线 + 柱顶胜率）+ 底部关键指标 */
+.trend-chart { width: 100%; }
+.trend-frame {
+  background: var(--bg-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 12px 8px 6px;
+}
+.trend-frame .trend-svg { display: block; width: 100%; height: 152px; }
+.trend-grid { stroke: var(--border-soft); stroke-width: 1; opacity: 0.55; }
+.trend-base { stroke: var(--border); stroke-width: 1; }
+.trend-val { font-size: 11px; fill: var(--text-dim); font-weight: 700; }
+.trend-day { font-size: 11px; fill: var(--text-dim); }
+.trend-metrics { display: flex; margin-top: 12px; }
+.trend-metrics .tm {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 2px 0;
+}
+.trend-metrics .tm + .tm { border-left: 1px solid var(--border-soft); }
+.trend-metrics .tm-k { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; color: var(--text-dim); }
+.trend-metrics .tm-v { font-size: 16px; line-height: 1.1; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.trend-metrics .tm-sep { color: var(--text-faint); font-weight: 400; padding: 0 3px; }
+.trend-metrics .st-win { color: var(--win); }
+.trend-metrics .st-lose { color: var(--lose); }
+.trend-na { color: var(--text-faint); }
+
+/* 对战克制列表 */
+.matchup-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px 8px;
+  border-bottom: 1px solid var(--border-soft);
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.matchup-head span:nth-child(1) { flex: 1 1 auto; min-width: 0; }
+.matchup-head span:nth-child(2) { flex: 0 0 auto; }
+.matchup-head span:nth-child(3) { flex: 0 0 58px; text-align: center; }
+
+.matchup-list { display: flex; flex-direction: column; }
+.matchup-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 4px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.matchup-row:last-child { border-bottom: 0; }
+.matchup-row .mu-comp {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.matchup-row .mu-comp .mu-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--text);
+}
+.matchup-row .mu-count { flex: 0 0 auto; font-size: 12px; color: var(--text-dim); }
+.matchup-row .mu-rate {
+  flex: 0 0 auto;
+  min-width: 58px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* 克星 / 易得角标：反差色小标签，从深色底跳出 */
+.the-pill {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--lose-bg);
+  border: 1px solid var(--lose);
+  color: var(--lose);
+}
+.the-pill.easy {
+  background: var(--win-bg);
+  border-color: var(--win);
+  color: var(--win);
+}
+
+/* 空态占位 */
+.insight-empty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 26px 8px;
+  font-size: 13px;
+  color: var(--text-faint);
+}
+.insight-empty .icon { width: 15px; height: 15px; }
+
+/* 窄屏：两块内容上下排列 */
+@media (max-width: 860px) {
+  .insight-grid { grid-template-columns: 1fr; }
+}

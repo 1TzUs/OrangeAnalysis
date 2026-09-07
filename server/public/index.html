@@ -6,7 +6,7 @@
   <script>(function(){try{if(localStorage.getItem('zabao.theme')==='light'){document.documentElement.setAttribute('data-theme','light');}}catch(e){}})();</script>
   <title>欧润吉战报分析助手</title>
   <link rel="icon" type="image/jpeg" href="/orange.jpg" />
-  <link rel="stylesheet" href="/style.css?v=20260907-14" />
+  <link rel="stylesheet" href="/style.css?v=20260907-19" />
 </head>
 <body>
   <header class="app-header">
@@ -25,6 +25,7 @@
     <nav class="tabs">
       <button class="tab-btn active" data-tab="parse"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 15l-5-5-5.5 5.5"/></svg>战报识别</button>
       <button class="tab-btn" data-tab="analyze"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V11M10 20V5M16 20v-6"/><path d="M2.5 20h19"/></svg>数据分析</button>
+      <button class="tab-btn" data-tab="insight"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.3 5.5 6 .5-4.5 3.9 1.3 5.9L12 15.2l-5.1 3.3L8.2 12.4 3.7 8.5l6-.5z"/></svg>洞察</button>
       <button class="tab-btn" data-tab="settings"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.2M12 19v2.2M2.8 12h2.2M19 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6"/></svg>设置</button>
     </nav>
 
@@ -159,6 +160,75 @@
         <button type="button" class="sub-tab" data-view="matrix"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5c1 2.6-1.2 3.6-1.2 5.5A4 4 0 0 0 17 12c.2 3-2 4.9-4.8 5A5 5 0 0 1 8 11.5c.2-2.6 1.6-4 4-8z"/></svg> 对战热力图</button>
       </nav>
       <div id="analyze-result" class="analyze-result"></div>
+    </section>
+
+    <!-- 洞察页 -->
+    <section id="tab-insight" class="tab-panel hidden">
+      <div class="insight-toolbar">
+        <div class="filter-group alliance">
+          <span class="filter-label">同盟</span>
+          <div id="insight-alliance" class="chips"></div>
+        </div>
+        <div class="filter-group">
+          <span class="filter-label">时间</span>
+          <div id="insight-hours" class="sel" data-value="0">
+            <button type="button" class="sel-trigger"><span class="sel-text">全部</span><svg class="icon chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9l5 5 5-5"/></svg></button>
+            <div class="sel-menu hidden">
+              <button type="button" class="sel-opt" data-val="0">全部</button>
+              <button type="button" class="sel-opt" data-val="96">近 96 小时</button>
+              <button type="button" class="sel-opt" data-val="48">近 48 小时</button>
+              <button type="button" class="sel-opt" data-val="24">近 24 小时</button>
+            </div>
+          </div>
+        </div>
+        <div class="filter-group">
+          <span class="filter-label">兵力</span>
+          <div id="insight-hp" class="sel" data-value="0">
+            <button type="button" class="sel-trigger"><span class="sel-text">不限</span><svg class="icon chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9l5 5 5-5"/></svg></button>
+            <div class="sel-menu hidden">
+              <button type="button" class="sel-opt" data-val="0">不限</button>
+              <button type="button" class="sel-opt" data-val="20000">20000 以上</button>
+              <button type="button" class="sel-opt" data-val="25000">25000 以上</button>
+              <button type="button" class="sel-opt" data-val="30000">30000 及以上</button>
+            </div>
+          </div>
+        </div>
+        <div class="filter-group">
+          <span class="filter-label">走势窗口</span>
+          <div id="insight-days" class="sel" data-value="14">
+            <button type="button" class="sel-trigger"><span class="sel-text">近 14 天</span><svg class="icon chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9l5 5 5-5"/></svg></button>
+            <div class="sel-menu hidden">
+              <button type="button" class="sel-opt" data-val="7">近 7 天</button>
+              <button type="button" class="sel-opt" data-val="14">近 14 天</button>
+              <button type="button" class="sel-opt" data-val="30">近 30 天</button>
+              <button type="button" class="sel-opt" data-val="90">近 90 天</button>
+            </div>
+          </div>
+        </div>
+        <div class="filter-group comp">
+          <span class="filter-label">阵容</span>
+          <div id="insight-comp" class="sel" data-value="">
+            <button type="button" class="sel-trigger"><span class="sel-text">请选择</span><svg class="icon chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9l5 5 5-5"/></svg></button>
+            <div class="sel-menu hidden"></div>
+          </div>
+        </div>
+        <div class="toolbar-actions">
+          <button id="btn-insight-csv" class="btn" title="导出当前筛选下阵容排行 CSV">导出CSV</button>
+          <button id="btn-insight-poster" class="btn" title="生成阵容排行图片海报">生成海报</button>
+        </div>
+      </div>
+      <div class="insight-grid">
+        <section class="insight-card">
+          <h3 class="insight-title"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V10M10 19V4M16 19V14M20 19v-3"/><path d="M2.5 21h19"/></svg>阵容走势</h3>
+          <p class="insight-desc" id="insight-trend-desc">所选阵容近 14 天逐日出场与胜率走势</p>
+          <div id="trend-chart" class="trend-chart"></div>
+        </section>
+        <section class="insight-card">
+          <h3 class="insight-title"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5c1 2.6-1.2 3.6-1.2 5.5A4 4 0 0 0 17 12c.2 3-2 4.9-4.8 5A5 5 0 0 1 8 11.5c.2-2.6 1.6-4 4-8z"/></svg>对战克制</h3>
+          <p class="insight-desc">所选阵容 vs 各对手的胜率，标注最强对手 / 最弱对手</p>
+          <div id="matchup-list" class="matchup-list"></div>
+        </section>
+      </div>
     </section>
 
     <!-- 设置页 -->
@@ -415,6 +485,6 @@
     <span>© 2026 欧润吉 All rights reserved</span>
   </footer>
 
-  <script src="/app.js?v=20260907-14"></script>
+  <script src="/app.js?v=20260907-36"></script>
 </body>
 </html>

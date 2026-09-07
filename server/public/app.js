@@ -30,6 +30,7 @@
     trash: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/></svg>',
     expand: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H5a1 1 0 0 0-1 1v4M15 4h4a1 1 0 0 1 1 1v4M9 20H5a1 1 0 0 1-1-1v-4M15 20h4a1 1 0 0 0 1-1v-4"/></svg>',
     collapse: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3v5H3M16 3v5h5M8 21v-5H3M16 21v-5h5"/></svg>',
+    x: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   };
   /** 返回指定 SVG 图标字符串（未知名回退为空） */
   function icon(name) {
@@ -57,10 +58,71 @@
     if (toggle) {
       toggle.addEventListener('click', () => {
         const cur = document.documentElement.getAttribute('data-theme') === 'light';
-        applyTheme(cur ? 'dark' : 'light');
+        // 用圆形扩散过渡动画切换主题（参考 View Transitions API 实现，Element Plus 官网同款效果）
+        toggleThemeWithReveal(cur ? 'dark' : 'light', toggle);
       });
     }
   })();
+
+  /**
+   * 带圆形扩散过渡地切换主题。
+   * 观感：暗→亮 = 亮色圆从按钮中心向外扩散、盖住暗色；亮→暗 = 亮色圆向按钮中心回收、露出暗色。
+   * 实现要点：过渡所需的圆形剪裁初始值/方向/@keyframes 由本函数在点击时以「具体像素」
+   * 动态注入临时 <style>（而非用 CSS 变量，规避部分 Chrome 里伪元素不识别动态 var 导致的
+   * 圆心偏移），并写死初始剪裁消除新视图先整帧画出的闪烁。
+   * @param {string} theme 目标主题 'light' | 'dark'
+   * @param {HTMLElement} originEl 主题切换按钮，作为扩散动画的起始点
+   */
+  function toggleThemeWithReveal(theme, originEl) {
+    // 浏览器不支持 View Transitions 或用户偏好减弱动效时，直接切换，不播动画
+    if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      applyTheme(theme);
+      return;
+    }
+    // 取按钮中心点作为扩散圆心（视口坐标），并计算覆盖全屏所需半径
+    const rect = originEl.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    const R = Math.hypot(
+      Math.max(x, window.innerWidth - x),
+      Math.max(y, window.innerHeight - y)
+    );
+    const rootEl = document.documentElement;
+    const toLight = theme === 'light';
+    const dirClass = toLight ? 'theme-to-light' : 'theme-to-dark';
+    // 清掉上一次可能残留的过渡样式与方向 class，确保重复/快速点击时重建
+    let st = document.getElementById('theme-transition-style');
+    if (st) st.remove();
+    rootEl.classList.remove('theme-to-light', 'theme-to-dark');
+    // 注入过渡专用 CSS：初始剪裁写死为具体像素（伪元素一创建即生效，消除初帧闪烁），
+    // 动画随伪元素创建同步启动，无 JS 时序空隙。
+    const css = toLight
+      ? [
+          `html.${dirClass}::view-transition-old(root){z-index:0}`,
+          `html.${dirClass}::view-transition-new(root){z-index:1;clip-path:circle(0px at ${x}px ${y}px);animation:vt-grow 450ms ease-in forwards}`,
+          `@keyframes vt-grow{to{clip-path:circle(${R}px at ${x}px ${y}px)}}`
+        ].join('\n')
+      : [
+          `html.${dirClass}::view-transition-old(root){z-index:1;clip-path:circle(${R}px at ${x}px ${y}px);animation:vt-shrink 450ms ease-in forwards}`,
+          `html.${dirClass}::view-transition-new(root){z-index:0}`,
+          `@keyframes vt-shrink{to{clip-path:circle(0px at ${x}px ${y}px)}}`
+        ].join('\n');
+    st = document.createElement('style');
+    st.id = 'theme-transition-style';
+    st.textContent = css;
+    document.head.appendChild(st);
+    rootEl.classList.add(dirClass);
+    // 切换主题：新状态更新后，过渡伪元素会按注入的剪裁动画自行播放
+    const transition = document.startViewTransition(() => applyTheme(theme));
+    // 过渡结束后清理注入的样式与方向 class
+    Promise.resolve(transition.finished)
+      .finally(() => {
+        rootEl.classList.remove('theme-to-light', 'theme-to-dark');
+        const s = document.getElementById('theme-transition-style');
+        if (s) s.remove();
+      })
+      .catch(() => {});
+  }
 
   /** 当前识别模式：'pc'（横屏）或 'portrait'（竖屏） */
   let parseMode = 'pc';
@@ -345,21 +407,24 @@
     const trigger = root.querySelector('.sel-trigger');
     const menu = root.querySelector('.sel-menu');
     const textEl = trigger.querySelector('.sel-text');
-    const opts = Array.from(menu.querySelectorAll('.sel-opt'));
+    /** 动态读取当前选项（菜单可能被 innerHTML 重绘，避免长期缓存旧元素导致监听/focus 失效） */
+    const opts = () => Array.from(menu.querySelectorAll('.sel-opt'));
     /** 绑定当前值：更新 data-value、触发区文本，并高亮选中项 */
     const bind = (val) => {
-      const opt = opts.find((o) => o.dataset.val === val) || opts[0];
+      const list = opts();
+      const opt = list.find((o) => o.dataset.val === val) || list[0];
       root.dataset.value = val;
       if (opt) textEl.textContent = opt.textContent;
-      opts.forEach((o) => o.classList.toggle('active', o.dataset.val === val));
+      list.forEach((o) => o.classList.toggle('active', o.dataset.val === val));
     };
-    opts.forEach((o) => {
-      o.addEventListener('click', () => {
-        bind(o.dataset.val);
-        menu.classList.add('hidden');
-        root.classList.remove('open');
-        if (onPick) onPick(o.dataset.val);
-      });
+    // 事件委托：菜单重绘（innerHTML 重建 option）后新选项仍响应点击
+    menu.addEventListener('click', (e) => {
+      const o = e.target.closest('.sel-opt');
+      if (!o) return;
+      bind(o.dataset.val);
+      menu.classList.add('hidden');
+      root.classList.remove('open');
+      if (onPick) onPick(o.dataset.val);
     });
     trigger.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -378,19 +443,20 @@
     };
     /** 将焦点移到相对当前项相邻/首尾的选项（可越界回绕），无高亮项时从当前选中项出发 */
     const moveFocus = (step) => {
-      const activeIdx = opts.findIndex((o) => o === document.activeElement);
-      const curIdx = opts.findIndex((o) => o.dataset.val === root.dataset.value);
+      const list = opts();
+      const activeIdx = list.findIndex((o) => o === document.activeElement);
+      const curIdx = list.findIndex((o) => o.dataset.val === root.dataset.value);
       const base = activeIdx !== -1 ? activeIdx : curIdx;
-      const n = opts.length;
+      const n = list.length;
       const next = base === -1 ? 0 : (base + step + n) % n;
-      opts[next]?.focus();
+      list[next]?.focus();
     };
     // 键盘可达：方向键在选项间移动、Home/End 跳首尾、Esc 收起并归还焦点到触发区；Enter/Space 走 <button> 原生触发
     menu.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowDown') { e.preventDefault(); moveFocus(1); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); moveFocus(-1); }
-      else if (e.key === 'Home') { e.preventDefault(); opts[0]?.focus(); }
-      else if (e.key === 'End') { e.preventDefault(); opts[opts.length - 1]?.focus(); }
+      else if (e.key === 'Home') { e.preventDefault(); const l = opts(); l[0]?.focus(); }
+      else if (e.key === 'End') { e.preventDefault(); const l = opts(); l[l.length - 1]?.focus(); }
       else if (e.key === 'Escape') { e.preventDefault(); close(); trigger.focus(); }
     });
     // 聚焦触发区时：方向键展开并定位，Esc 收起
@@ -735,6 +801,331 @@
     showSettingsToast._t = setTimeout(() => settingsToast.classList.remove('show'), 2200);
   }
 
+  // ==================== 洞察（阵容走势 + 对战克制 + CSV/海报导出） ====================
+  const tabInsight = document.getElementById('tab-insight');
+  const insightAllianceEl = document.getElementById('insight-alliance');
+  const insightHours = document.getElementById('insight-hours');
+  const insightHp = document.getElementById('insight-hp');
+  const insightDays = document.getElementById('insight-days');
+  const insightComp = document.getElementById('insight-comp');
+  const trendChartEl = document.getElementById('trend-chart');
+  const matchupListEl = document.getElementById('matchup-list');
+  const btnInsightCsv = document.getElementById('btn-insight-csv');
+  const btnInsightPoster = document.getElementById('btn-insight-poster');
+  /** 洞察页状态：当前同盟 / /api/analyze 返回 / 选中阵容（集中管理避免零散变量） */
+  const insightState = { alliance: '', data: null, comp: '' };
+
+  /** 本地时区日期 YYYY-MM-DD（导出文件名用，避免 toISOString 的 UTC 差一天） */
+  function locDate() {
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  }
+
+  /** 将洞察页 .sel 触发区文本同步为选中值（元素值存于 data-value） */
+  function setInsightCompValue(value) {
+    insightComp.dataset.value = value || '';
+    const opt = insightComp.querySelector(`.sel-opt[data-val="${value}"]`);
+    const textEl = insightComp.querySelector('.sel-text');
+    if (opt && textEl) textEl.textContent = opt.textContent;
+  }
+  /** 以分析数据填充阵容下拉选项（菜单重绘；监听走 initSelect 的事件委托，无需重新绑定） */
+  function buildCompMenu(comps) {
+    const menu = insightComp.querySelector('.sel-menu');
+    menu.innerHTML = (comps || []).map((c) => `<button type="button" class="sel-opt" data-val="${escHtml(c.comp)}">${escHtml(c.comp)}</button>`).join('');
+  }
+  /** 加载洞察页分析数据：/api/analyze 快照 → 填充阵容下拉 → 渲染走势与克制 */
+  /** 组装洞察页共用的筛选查询串（同盟/时间/兵力），extra 为额外参数（如 comp/days） */
+  function insightParams(extra) {
+    const params = new URLSearchParams();
+    if (insightState.alliance) params.set('alliance', insightState.alliance);
+    if (Number(insightHours.dataset.value || 0) > 0) params.set('hours', insightHours.dataset.value);
+    if (Number(insightHp.dataset.value || 0) > 0) params.set('minHp', insightHp.dataset.value);
+    if (extra) for (const k in extra) params.set(k, extra[k]);
+    return params;
+  }
+  async function loadInsight() {
+    const params = insightParams();
+    try {
+      const res = await fetch('/api/analyze?' + params.toString());
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || '加载失败');
+      insightState.data = data;
+      buildCompMenu(data.comps || []);
+      // 保持当前选中的阵容；无则默认取场次最多的
+      const first = data.comps && data.comps[0] ? data.comps[0].comp : '';
+      const comp = insightState.comp || first;
+      if (comp) {
+        insightState.comp = comp;
+        setInsightCompValue(comp);
+        renderTrend(comp);
+        renderMatchups(comp);
+      } else {
+        trendChartEl.innerHTML = `<div class="insight-empty">${icon('info')} 暂无可用阵容数据</div>`;
+        matchupListEl.innerHTML = '';
+      }
+    } catch (e) {
+      trendChartEl.innerHTML = `<div class="status error">${icon('error')} ${e.message}</div>`;
+    }
+  }
+  /** 渲染某阵容近 N 天走势（内联 SVG 柱状图，纯原生无三方库） */
+  function renderTrend(comp) {
+    if (!comp) return;
+    trendChartEl.innerHTML = `<div class="status loading">加载走势中…</div>`;
+    const params = insightParams({ comp, days: insightDays.dataset.value || '14' });
+    fetch('/api/analyze/trend?' + params.toString())
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error) throw new Error(data.error);
+        const points = data.points || [];
+        const total = points.reduce((s, p) => s + p.total, 0);
+        if (!total) {
+          trendChartEl.innerHTML = `<div class="insight-empty">${icon('info')} 所选阵容在近 ${data.days || 14} 天内暂无战报，可尝试放大「走势窗口」或切换阵容</div>`;
+          return;
+        }
+        const W = 560, H = 152, padT = 20, padB = 18, padL = 20, padR = 20;
+        // 顶部内边距给「接近 100% 的高柱」其上方胜率文字留出完整字高，四周留白避免标签被裁切
+        const plotW = W - padL - padR;
+        const innerH = H - padT - padB;
+        const bw = plotW / points.length;
+        const maxRate = 100; // 胜率天然 0-100，柱高按 100% 归一即可
+        const bars = points.map((p, i) => {
+          const h = p.total ? Math.max(2, (p.winRate / maxRate) * innerH) : 0;
+          const y = H - padB - h;
+          const c = winRateColor(p.winRate);
+          const fill = c ? `rgb(${c.join(',')})` : '#8b98ad';
+          return `<rect x="${padL + i * bw + bw * 0.18}" y="${y}" width="${bw * 0.64}" height="${h}" rx="2" fill="${fill}" title="${escHtml(p.day)}：出场 ${p.total} 场 · ${p.wins} 胜 · 胜率 ${p.winRate}%"/>`;
+        }).join('');
+        // 稀疏日期刻度：首/中均分/尾，最多 6 个（MM/DD），避免柱被遮挡、标签重叠
+        const labelCount = Math.min(6, points.length);
+        const labelIdx = new Set([...Array(labelCount)].map((_, k) => ((points.length - 1) * k) / (labelCount - 1) | 0));
+        const ticks = [...labelIdx].sort((a, b) => a - b).map((i) => {
+          const d = points[i].day.slice(5).replace('-', '/');
+          return `<text x="${padL + i * bw + bw * 0.5}" y="${H - 6}" text-anchor="middle" class="trend-day">${d}</text>`;
+        }).join('');
+        // 图表参考线：25/50/75% 水平浅格 + 0 基线，便于对照柱高
+        const grid = [25, 50, 75].map((g) => {
+          const gy = H - padB - (g / 100) * innerH;
+          return `<line class="trend-grid" x1="${padL}" x2="${padL + plotW}" y1="${gy}" y2="${gy}"/>`;
+        }).join('');
+        const base = `<line class="trend-base" x1="${padL}" x2="${padL + plotW}" y1="${H - padB}" y2="${H - padB}"/>`;
+        // 「最近胜率」取最近一场有数据（total>0）的日期，避免末位无数据日误显示 0%
+        const lastData = [...points].reverse().find((p) => p.total > 0);
+        const wsum = points.reduce((s, p) => s + p.wins, 0);
+        const peak = Math.max(...points.map((p) => p.winRate));
+        const wrClr = (r) => { const c = winRateColor(r); return c ? `rgb(${c.join(',')})` : '#8b98ad'; };
+        const lastVal = lastData ? lastData.winRate + '%' : '—';
+        const lastDir = lastData ? `style="color:${wrClr(lastData.winRate)}"` : 'style="color:var(--text-faint)"';
+        // 柱顶胜率数值标注：按「有数据的天数」决定——不多则全标，过多则均匀抽样，避免标签重叠
+        const activeIdx = points.map((p, i) => (p.total > 0 ? i : -1)).filter((i) => i >= 0);
+        let valIdx;
+        if (activeIdx.length <= 14) {
+          valIdx = activeIdx; // 活跃日较少，全部标注胜率
+        } else {
+          // 活跃日很多（高频阵容 + 长窗口）：均匀抽样最多 14 个索引，兼顾可读性
+          const step = Math.max(1, Math.ceil(activeIdx.length / 14));
+          valIdx = activeIdx.filter((_, k, a) => k === 0 || k === a.length - 1 || k % step === 0);
+        }
+        const vals = (() => {
+          // 相邻标签防重叠：按 x 间距 ≥26px 贪心保留，间距不足的邻近柱省略数值
+          let lastX = -Infinity;
+          const shown = [];
+          for (const i of valIdx) {
+            const x = padL + i * bw + bw * 0.5;
+            if (x - lastX >= 26) { shown.push(i); lastX = x; }
+          }
+          return shown.map((i) => {
+            const p = points[i];
+            const h = p.total ? Math.max(2, (p.winRate / maxRate) * innerH) : 0;
+            const vy = Math.max(12, H - padB - h - 5); // 下限保护：高柱胜率文字不至于顶穿 SVG 上边界
+            return `<text x="${padL + i * bw + bw * 0.5}" y="${vy}" text-anchor="middle" class="trend-val">${p.winRate}%</text>`;
+          }).join('');
+        })();
+        // 底部关键指标：总场次 / 胜负 / 最近胜率 / 单日最高，浅分隔线横向排布
+        const metrics = `
+          <div class="trend-metrics">
+            <div class="tm"><span class="tm-k">总场次</span><span class="tm-v">${total}</span></div>
+            <div class="tm"><span class="tm-k">胜负</span><span class="tm-v"><b class="st-win">${wsum}</b><span class="tm-sep">/</span><b class="st-lose">${total - wsum}</b></span></div>
+            <div class="tm"><span class="tm-k">最近胜率</span><span class="tm-v" ${lastDir}>${lastVal}</span></div>
+            <div class="tm"><span class="tm-k">单日最高</span><span class="tm-v" style="color:${wrClr(peak)}">${peak}%</span></div>
+          </div>`;
+        trendChartEl.innerHTML = `<div class="trend-frame"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="trend-svg" role="img" aria-label="${escHtml(comp)} 近${data.days}天胜率走势">${grid}${base}${bars}${vals}${ticks}</svg></div>${metrics}`;
+      })
+      .catch((e) => { trendChartEl.innerHTML = `<div class="status error">${icon('error')} ${e.message}</div>`; });
+  }
+  /** 渲染所选阵容 vs 各对手的克制列表（基于现有 matrix.cells，纯前端） */
+  function renderMatchups(comp) {
+    const data = insightState.data;
+    if (!data || !data.matrix || !data.matrix.cells) {
+      matchupListEl.innerHTML = `<div class="insight-empty">先加载分析数据</div>`;
+      return;
+    }
+    const me = data.matrix.cells[comp];
+    if (!me) { matchupListEl.innerHTML = `<div class="insight-empty">所选阵容暂无对阵数据</div>`; return; }
+    const rows = Object.keys(me)
+      .filter((k) => k !== comp && me[k] && me[k].total > 0)
+      .map((k) => ({ comp: k, total: me[k].total, wins: me[k].wins, winRate: me[k].winRate }))
+      .sort((a, b) => b.winRate - a.winRate || b.total - a.total);
+    if (!rows.length) { matchupListEl.innerHTML = `<div class="insight-empty">暂无对阵数据</div>`; return; }
+    // 最强对手 = 对本阵容胜率最低（我方胜率低）且场次达标的对手；最弱对手 = 反之
+    const samples = rows.filter((r) => r.total >= 3);
+    const king = samples.length ? samples.slice().sort((a, b) => a.winRate - b.winRate)[0] : null;
+    const easy = samples.length ? samples.slice().sort((a, b) => b.winRate - a.winRate)[0] : null;
+    const head = `<div class="matchup-head"><span>阵容</span><span>场次</span><span>胜率</span></div>`;
+    matchupListEl.innerHTML = head + rows.map((r) => {
+      const c = winRateColor(r.winRate);
+      const bg = c ? `rgb(${c.join(',')})` : 'rgba(130,140,152,0.28)';
+      const fg = c ? textColorFor(c) : '#8b98ad';
+      const mark = king && r.comp === king.comp ? `<span class="the-pill">最强对手</span>`
+        : easy && r.comp === easy.comp ? `<span class="the-pill easy">最弱对手</span>` : '';
+      return `<div class="matchup-row"><span class="mu-comp"><span class="mu-label">${escHtml(r.comp)}</span>${mark}</span><span class="mu-count">${r.total}场 · ${r.wins}胜</span><span class="mu-rate" style="background:${bg};color:${fg}">${r.winRate}%</span></div>`;
+    }).join('');
+  }
+  /** 导出当前筛选下方阵容排行 CSV（前端拼装，零后端改动） */
+  function exportCsv() {
+    const data = insightState.data;
+    if (!data || !data.comps || !data.comps.length) { setStatus('warn', '暂无数据可导出'); return; }
+    const head = ['阵容', '场次', '胜', '胜率%', '平均红度'].join(',');
+    const lines = data.comps.map((c) => [c.comp, c.total, c.wins, c.winRate, c.avgStars].join(','));
+    const csv = '\uFEFF' + head + '\n' + lines.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `阵容胜率排行_${locDate()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+    setStatus('ok', 'CSV 已导出');
+  }
+  /** 生成阵容排行图片海报（canvas 绘制 → PNG 下载），按当前主题配色 */
+  function exportPoster() {
+    const data = insightState.data;
+    if (!data || !data.comps || !data.comps.length) { setStatus('warn', '暂无数据可生成'); return; }
+    const comps = data.comps.slice(0, 20);
+    const light = document.documentElement.getAttribute('data-theme') === 'light';
+    const W = 980, pad = 24, rowH = 30, headH = 46, titleH = 70;
+    const H = titleH + headH + comps.length * rowH + pad * 2;
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = light ? '#ffffff' : '#0e1420';
+    ctx.fillRect(0, 0, W, H);
+    const titleColor = light ? '#1c2534' : '#e7edf6';
+    const dimColor = light ? '#66707f' : '#8b98ad';
+    const lineColor = light ? '#e2e7ee' : '#232f47';
+    ctx.fillStyle = titleColor;
+    ctx.font = 'bold 26px "Microsoft YaHei", sans-serif';
+    ctx.fillText('欧润吉 · 阵容胜率排行', pad, 44);
+    ctx.fillStyle = dimColor;
+    ctx.font = '14px "Microsoft YaHei", sans-serif';
+    ctx.fillText(`导出时间 ${new Date().toLocaleString('zh-CN')} ｜ 有效战报 ${data.total} 场`, pad, 66);
+    const cols = [
+      { t: '阵容', x: pad }, { t: '场次', x: pad + 420 }, { t: '胜', x: pad + 500 },
+      { t: '胜率', x: pad + 580 }, { t: '平均红度', x: pad + 690 },
+    ];
+    let y = titleH + headH;
+    ctx.font = 'bold 15px "Microsoft YaHei", sans-serif';
+    ctx.fillStyle = titleColor;
+    cols.forEach((c) => ctx.fillText(c.t, c.x, y - headH + 28));
+    ctx.font = '15px "Microsoft YaHei", sans-serif';
+    comps.forEach((c) => {
+      ctx.strokeStyle = lineColor;
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(pad, y - rowH + 10);
+      ctx.lineTo(W - pad, y - rowH + 10);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = titleColor;
+      ctx.fillText(c.comp, cols[0].x, y);
+      ctx.fillText(String(c.total), cols[1].x, y);
+      ctx.fillText(String(c.wins), cols[2].x, y);
+      // 恰好 50% 时 winRateColor 返回 null：回退中性灰块，使胜率块与浅/深背景均清晰区分
+      const col = winRateColor(c.winRate) || [140, 148, 158];
+      ctx.fillStyle = `rgb(${col.join(',')})`;
+      const b = cols[3].x - 4, bw2 = 74, bh = 20;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(b, y - 16, bw2, bh, 6);
+      else ctx.rect(b, y - 16, bw2, bh);
+      ctx.fill();
+      ctx.fillStyle = textColorFor(col);
+      ctx.fillText(`${c.winRate}%`, b + 10, y);
+      ctx.fillStyle = titleColor;
+      ctx.fillText(c.starsKnown ? `${c.avgStars}红` : '—', cols[4].x, y);
+      y += rowH;
+    });
+    // 渲染完成 → 转 dataURL，先弹预览浮层，确认满意后再保存
+    const url = canvas.toDataURL('image/png');
+    showPosterPreview(url, () => {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `欧润吉阵容排行_${locDate()}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setStatus('ok', '海报已保存');
+    });
+  }
+  /**
+   * 海报预览浮层：生成后先预览，点击「保存图片」才下载，Esc/关闭可退出。
+   * 浮层元素首次创建后复用，避免重复绑定事件。
+   * @param {string} src 图片 dataURL
+   * @param {function} onSave 确认保存回调（下载在内部触发）
+   */
+  function showPosterPreview(src, onSave) {
+    let pv = document.getElementById('poster-preview');
+    if (!pv) {
+      pv = document.createElement('div');
+      pv.id = 'poster-preview';
+      pv.className = 'poster-preview';
+      pv.innerHTML = `
+        <div class="pp-card">
+          <div class="pp-head"><span class="pp-title">海报预览</span><button type="button" class="pp-close" title="关闭">${icon('x')}</button></div>
+          <div class="pp-body"><img alt="海报预览" /></div>
+          <div class="pp-foot"><button type="button" class="btn btn-soft pp-cancel">关闭</button><button type="button" class="btn btn-primary pp-save">保存图片</button></div>
+        </div>`;
+      document.body.appendChild(pv);
+      const close = () => { pv.classList.add('hidden'); document.body.classList.remove('fs-lock'); };
+      pv.querySelector('.pp-close').addEventListener('click', close);
+      pv.querySelector('.pp-cancel').addEventListener('click', close);
+      pv.querySelector('.pp-save').addEventListener('click', () => { onSave(); close(); });
+      pv.querySelector('.pp-card').addEventListener('click', (e) => e.stopPropagation());
+      pv.addEventListener('click', close);
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !pv.classList.contains('hidden')) close(); });
+    }
+    pv.querySelector('.pp-body img').src = src;
+    pv.classList.remove('hidden');
+    document.body.classList.add('fs-lock');
+  }
+  // 洞察页下拉初始化：时间 / 兵力变更重载分析；阵容变更重渲染走势与克制
+  initSelect(insightHours, () => loadInsight());
+  initSelect(insightHp, () => loadInsight());
+  // 走势窗口变更：只重绘走势图（克制列表与窗口无关），并同步卡片说明文案
+  initSelect(insightDays, () => {
+    const opt = insightDays.querySelector(`.sel-opt[data-val="${insightDays.dataset.value}"]`);
+    const descEl = document.getElementById('insight-trend-desc');
+    if (opt && descEl) descEl.textContent = `所选阵容近 ${opt.textContent.replace('近 ', '').replace(' 天', '')} 天逐日出场与胜率走势`;
+    renderTrend(insightState.comp);
+  });
+  initSelect(insightComp, (val) => { insightState.comp = val; renderTrend(val); renderMatchups(val); });
+  // 洞察页同盟 chips：提取去重同盟，点击切换后重载
+  fetch('/api/records')
+    .then((r) => r.json())
+    .then((data) => {
+      const list = [...new Set(((data.items || []).map((r) => r.alliance)).filter(Boolean))].sort();
+      const all = ['', ...list];
+      insightAllianceEl.innerHTML = all.map((a) => `<button type="button" class="chip" data-alliance="${escHtml(a)}">${a || '全部'}</button>`).join('');
+      Array.from(insightAllianceEl.querySelectorAll('.chip')).forEach((chip) => chip.addEventListener('click', () => {
+        insightState.alliance = chip.dataset.alliance || '';
+        Array.from(insightAllianceEl.querySelectorAll('.chip')).forEach((c) => c.classList.toggle('active', c.dataset.alliance === insightState.alliance));
+        loadInsight();
+      }));
+    })
+    .catch(() => {});
+  btnInsightCsv.addEventListener('click', exportCsv);
+  btnInsightPoster.addEventListener('click', exportPoster);
+
   /** 切换到指定标签页并执行对应页面的加载动作；写入 zabao.tab 供刷新后恢复 */
   function activateTab(tab) {
     document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
@@ -742,12 +1133,14 @@
     if (btn) btn.classList.add('active');
     tabParse.classList.toggle('hidden', tab !== 'parse');
     tabAnalyze.classList.toggle('hidden', tab !== 'analyze');
+    tabInsight.classList.toggle('hidden', tab !== 'insight');
     tabSettings.classList.toggle('hidden', tab !== 'settings');
     if (tab === 'analyze') {
       // 首次打开分析页时先套用「有效战报默认口径」为筛选器初值，再加载
       if (!caliberApplied) { applyDefaultCaliber(); caliberApplied = true; }
       loadAnalysis();
     }
+    if (tab === 'insight') loadInsight();
     if (tab === 'settings') fillSettingsForm(loadSettings());
   }
   /** 切换标签页 */
@@ -1370,24 +1763,71 @@
     }
   });
 
-  /** 渲染同盟筛选标签（chips），点击切换选中同盟 */
+  /** 渲染同盟筛选标签（chips）；具体同盟带删除按钮，可删除该同盟全部战报 */
   function renderAllianceChips(allianceList) {
     const all = ['', ...allianceList];
     allianceChips.innerHTML = all
       .map((a) => {
         const label = a || '全部';
         const activeCls = a === currentAlliance ? 'active' : '';
-        return `<button type="button" class="chip ${activeCls}" data-alliance="${a}">${label}</button>`;
+        // 仅具体同盟提供删除按钮（「全部」不含）
+        const del = a
+          ? `<span class="chip-x" data-alliance="${a}" title="删除该同盟全部战报">${ICONS.trash}</span>`
+          : '';
+        return `<button type="button" class="chip ${activeCls}" data-alliance="${a}">${label}${del}</button>`;
       })
       .join('');
-    // 委托点击：任一 chip 点击即切换筛选并刷新
-    Array.from(allianceChips.querySelectorAll('.chip')).forEach((chip) => {
-      chip.addEventListener('click', () => {
-        currentAlliance = chip.dataset.alliance || '';
-        renderAllianceChips(allianceList);
-        loadAnalysis();
-      });
+  }
+
+  /** 容器级委托：删除按钮 → 删除同盟；否则 → 切换筛选（重渲染后仍有效，避免重复绑定） */
+  allianceChips.addEventListener('click', (e) => {
+    const del = e.target.closest && e.target.closest('.chip-x');
+    if (del) {
+      if (del.dataset.alliance) confirmDeleteAlliance(del.dataset.alliance);
+      return;
+    }
+    const chip = e.target.closest && e.target.closest('.chip');
+    if (!chip) return;
+    currentAlliance = chip.dataset.alliance || '';
+    allianceChips.querySelectorAll('.chip').forEach((x) => x.classList.toggle('active', x === chip));
+    loadAnalysis();
+  });
+
+  /** 删除指定同盟全部战报：先统计条数 → 二次确认（含条数）→ 调用后端接口 → 刷新筛选与分析 */
+  async function confirmDeleteAlliance(alliance) {
+    // 先统计该同盟当前条数，让用户明确将要删除的数据量
+    let n = 0;
+    try {
+      const items = (await (await fetch('/api/records')).json()).items || [];
+      n = items.filter((r) => r.alliance === alliance).length;
+    } catch { /* 统计失败时 n 保持 0，确认文案退化为不显示条数 */ }
+
+    const countLine = n > 0 ? `「${alliance}」共 ${n} 条战报。` : `确定删除同盟「${alliance}」的全部战报？`;
+    const ok = await openConfirm({
+      title: '删除同盟战报',
+      message: `${countLine}\n删除后不可恢复，是否继续？`,
+      okText: n > 0 ? `删除 ${n} 条` : '删除',
+      okClass: 'btn-danger',
+      icon: 'trash',
     });
+    if (!ok) return;
+    try {
+      const res = await fetch('/api/records/clear-alliance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alliance }),
+      });
+      const data = await res.json();
+      if (!data.ok) return openAlert('删除失败：' + (data.error || '未知错误'));
+      if (currentAlliance === alliance) currentAlliance = '';
+      openAlert(`已删除「${alliance}」的 ${data.removed} 条战报`);
+      // 刷新后需清理分析缓存并重建筛选列表，保证所见即所得
+      delete analyzeResultEl.dataset.last;
+      refreshAllianceChips();
+      loadAnalysis();
+    } catch (err) {
+      openAlert('删除失败：' + err.message);
+    }
   }
 
   /** 从记录中提取去重同盟名，刷新 chips；可选覆盖列表 */
