@@ -10,6 +10,58 @@
   const progressFill = document.getElementById('progress-fill');
   const progressText = document.getElementById('progress-text');
 
+  /** 单色极简 SVG 图标库（currentColor，随主题自适应）。统一在此维护，模板处用 icon(name) 引用 */
+  const ICONS = {
+    trophy: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10a1 1 0 0 1 1 1v2a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5V5a1 1 0 0 1 1-1z"/><path d="M8 21h8M12 16.5V21M6.5 5h-2v1a3 3 0 0 0 3 3M17.5 5h2v1a3 3 0 0 1-3 3"/></svg>',
+    fire: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5c1 2.6-1.2 3.6-1.2 5.5A4 4 0 0 0 17 12c.2 3-2 4.9-4.8 5A5 5 0 0 1 8 11.5c.2-2.6 1.6-4 4-8z"/></svg>',
+    star: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.1 4.3 4.7.7-3.4 3.3.8 4.7L12 13.8 7.8 16l.8-4.7L5.2 8l4.7-.7z"/></svg>',
+    truck: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h12v9H3z"/><path d="M15 10h2.5L20 12.5V15h-5z"/><circle cx="7" cy="17" r="1.4"/><circle cx="17" cy="17" r="1.4"/></svg>',
+    warn: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>',
+    clock: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    sort: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg>',
+    sortAsc: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5-5 5 5"/></svg>',
+    sortDesc: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9l5 5 5-5"/></svg>',
+    check: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.5l5 5 11-11"/></svg>',
+    error: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l8 16H4z"/><path d="M12 10v4M12 16.5h.01"/></svg>',
+    info: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>',
+    lock: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="11" width="12" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
+    download: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M6 10l6 5 6-5M5 20h14"/></svg>',
+    upload: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M6 8l6-5 6 5M5 20h14"/></svg>',
+    trash: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/></svg>',
+    expand: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H5a1 1 0 0 0-1 1v4M15 4h4a1 1 0 0 1 1 1v4M9 20H5a1 1 0 0 1-1-1v-4M15 20h4a1 1 0 0 0 1-1v-4"/></svg>',
+    collapse: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3v5H3M16 3v5h5M8 21v-5H3M16 21v-5h5"/></svg>',
+  };
+  /** 返回指定 SVG 图标字符串（未知名回退为空） */
+  function icon(name) {
+    return ICONS[name] || '';
+  }
+
+  /**
+   * 深浅主题：默认深色；用户手动切换后写入 localStorage 记忆。
+   * 通过 <html data-theme="light"> 驱动 CSS 变量，按钮显示太阳/月亮对应图标。
+   */
+  const THEME_KEY = 'zabao.theme';
+  function applyTheme(theme, persist) {
+    const isLight = theme === 'light';
+    document.documentElement.setAttribute('data-theme', isLight ? 'light' : '');
+    if (persist !== false) {
+      try { localStorage.setItem(THEME_KEY, isLight ? 'light' : 'dark'); } catch (e) {}
+    }
+  }
+  /** 初始化主题：优先用户记忆，否则默认深色 */
+  (function initTheme() {
+    let saved = 'dark';
+    try { saved = localStorage.getItem(THEME_KEY) || 'dark'; } catch (e) {}
+    applyTheme(saved, false);
+    const toggle = document.getElementById('theme-toggle');
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        const cur = document.documentElement.getAttribute('data-theme') === 'light';
+        applyTheme(cur ? 'dark' : 'light');
+      });
+    }
+  })();
+
   /** 当前识别模式：'pc'（横屏）或 'portrait'（竖屏） */
   let parseMode = 'pc';
 
@@ -35,10 +87,16 @@
     progressFill.style.width = '0%';
   }
 
-  /** 显示状态条 */
+  /** HTML 转义：后端错误/文件信息可能含 < > &，注入到 innerHTML 前必须先转义，避免破结构/XSS */
+  function escHtml(s) {
+    return String(s).replace(/[&<>]/g, (c) => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'));
+  }
+  /** 显示状态条：按级别自动配单色 SVG 图标（loading 走 ::after 转圈），文本经 escHtml 转义后透传 */
   function setStatus(cls, msg) {
+    const iconName = cls === 'error' ? 'error' : cls === 'warn' ? 'warn' : cls === 'loading' ? '' : 'check';
     statusEl.className = 'status ' + (cls || '');
-    statusEl.textContent = msg || '';
+    const safe = msg == null ? '' : escHtml(msg);
+    statusEl.innerHTML = safe ? `${iconName ? icon(iconName) + ' ' : ''}<span>${safe}</span>` : '';
     statusEl.classList.toggle('hidden', !msg);
   }
 
@@ -68,9 +126,9 @@
       }
       setProgress(list.length, list.length, `完成 ${list.length} / ${list.length}`);
       renderResults(items);
-      setStatus('', `✅ 共识别 ${items.length} 张战报`);
+      setStatus('', `共识别 ${items.length} 张战报`);
     } catch (e) {
-      setStatus('error', '❌ ' + e.message);
+      setStatus('error', e.message);
     } finally {
       hideProgress();
     }
@@ -123,11 +181,12 @@
     const div = document.createElement('div');
     div.className = 'battle-card ' + (b.result === 'win' ? 'win' : b.result === 'lose' ? 'lose' : '');
 
-    // 顶部：同盟 + 时间 + 结果
+    // 顶部：战斗序号 + 同盟对阵 + 时间/结果（三列网格对齐）
     const top = document.createElement('div');
     top.className = 'battle-top';
     const resultText = b.resultText || (b.result === 'win' ? '胜' : b.result === 'lose' ? '败' : '?');
     top.innerHTML = `
+      <span class="battle-id">第 ${i + 1} 战</span>
       <div class="alliance-row">
         <div class="alliance-side">
           <span class="alliance-badge">${b.leftAlliance || '未知'}</span>
@@ -138,11 +197,11 @@
         </div>
       </div>
       <div class="result-block">
-        ${b.time ? `<div class="battle-time" title="战报时间">⏱ ${b.time}</div>` : ''}
+        ${b.time ? `<div class="battle-time" title="战报时间">${icon('clock')} ${b.time}</div>` : ''}
         <div class="result-badge ${b.result}">${resultText}</div>
       </div>`;
 
-    // 主体：武将 + 兵力
+    // 主体：武将 + 兵力（序号已上移至顶部，正文居中只留体力消耗）
     const body = document.createElement('div');
     body.className = 'battle-body';
     body.innerHTML = `
@@ -151,8 +210,7 @@
         ${formatHp(b.leftHp)}
       </div>
       <div class="vs">
-        <span>第 ${i + 1} 战</span>
-        <span class="cost">${b.hpCost ? '体力-' + b.hpCost : ''}</span>
+        ${b.hpCost ? `<span class="cost">体力-${b.hpCost}</span>` : ''}
       </div>
       <div class="side right">
         ${renderGenerals(b.rightGenerals)}
@@ -226,7 +284,7 @@
     try {
       payload = JSON.parse(await file.text());
     } catch {
-      setStatus('error', '❌ 导入失败：文件不是有效的 JSON');
+      setStatus('error', '导入失败：文件不是有效的 JSON');
       return;
     }
     setStatus('loading', '正在导入并合并数据…');
@@ -239,7 +297,7 @@
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || '导入失败');
       const dup = data.total - data.added;
-      let msg = `✅ 导入完成：新增 ${data.added} 条，合并跳过重复 ${dup} 条`;
+      let msg = `导入完成：新增 ${data.added} 条，合并跳过重复 ${dup} 条`;
       if (data.skipped) msg += `，忽略无效数据 ${data.skipped} 条`;
       setStatus(dup > 0 || data.skipped > 0 ? 'warn' : '', msg);
       // 使同盟筛选与分析缓存失效，保证再次进入分析页时拉到最新数据
@@ -247,7 +305,7 @@
       refreshAllianceChips();
       if (!tabAnalyze.classList.contains('hidden')) loadAnalysis();
     } catch (e) {
-      setStatus('error', '❌ 导入失败：' + e.message);
+      setStatus('error', '导入失败：' + e.message);
     }
   });
 
@@ -276,6 +334,146 @@
   // 点击页面其他区域时关闭全部菜单
   document.addEventListener('click', closeDropdowns);
 
+  /**
+   * 将自定义下拉（.sel）初始化为受控菜单：读取 DOM 中 .sel-opt 选项，
+   * 值存于根元素 data-value，选中后更新触发区文本并回调 onPick。
+   * 用于替代原生 <select>，规避系统原生下拉的白色外观/样式不一致。
+   * @param {HTMLElement} root 包裹元素（应含 .sel-trigger 与 .sel-menu）
+   * @param {(val:string)=>void} onPick 选中回调，参数为选中值
+   */
+  function initSelect(root, onPick) {
+    const trigger = root.querySelector('.sel-trigger');
+    const menu = root.querySelector('.sel-menu');
+    const textEl = trigger.querySelector('.sel-text');
+    const opts = Array.from(menu.querySelectorAll('.sel-opt'));
+    /** 绑定当前值：更新 data-value、触发区文本，并高亮选中项 */
+    const bind = (val) => {
+      const opt = opts.find((o) => o.dataset.val === val) || opts[0];
+      root.dataset.value = val;
+      if (opt) textEl.textContent = opt.textContent;
+      opts.forEach((o) => o.classList.toggle('active', o.dataset.val === val));
+    };
+    opts.forEach((o) => {
+      o.addEventListener('click', () => {
+        bind(o.dataset.val);
+        menu.classList.add('hidden');
+        root.classList.remove('open');
+        if (onPick) onPick(o.dataset.val);
+      });
+    });
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = !menu.classList.contains('hidden');
+      closeSelects(); // 先收起其他下拉（若本项原本展开则就此收起）
+      if (!isOpen) {
+        menu.classList.remove('hidden');
+        root.classList.add('open');
+        bind(root.dataset.value); // 打开时同步高亮当前选中项
+      }
+    });
+    /** 收起本下拉 */
+    const close = () => {
+      menu.classList.add('hidden');
+      root.classList.remove('open');
+    };
+    /** 将焦点移到相对当前项相邻/首尾的选项（可越界回绕），无高亮项时从当前选中项出发 */
+    const moveFocus = (step) => {
+      const activeIdx = opts.findIndex((o) => o === document.activeElement);
+      const curIdx = opts.findIndex((o) => o.dataset.val === root.dataset.value);
+      const base = activeIdx !== -1 ? activeIdx : curIdx;
+      const n = opts.length;
+      const next = base === -1 ? 0 : (base + step + n) % n;
+      opts[next]?.focus();
+    };
+    // 键盘可达：方向键在选项间移动、Home/End 跳首尾、Esc 收起并归还焦点到触发区；Enter/Space 走 <button> 原生触发
+    menu.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); moveFocus(1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); moveFocus(-1); }
+      else if (e.key === 'Home') { e.preventDefault(); opts[0]?.focus(); }
+      else if (e.key === 'End') { e.preventDefault(); opts[opts.length - 1]?.focus(); }
+      else if (e.key === 'Escape') { e.preventDefault(); close(); trigger.focus(); }
+    });
+    // 聚焦触发区时：方向键展开并定位，Esc 收起
+    trigger.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (menu.classList.contains('hidden')) trigger.click();
+        else moveFocus(e.key === 'ArrowDown' ? 1 : -1);
+      } else if (e.key === 'Escape') {
+        close();
+      }
+    });
+    bind(root.dataset.value || '');
+  }
+  /** 关闭所有自定义下拉菜单 */
+  function closeSelects() {
+    document.querySelectorAll('.sel').forEach((w) => {
+      w.querySelector('.sel-menu')?.classList.add('hidden');
+      w.classList.remove('open');
+    });
+  }
+  // 点击页面其他区域时同时关闭自定义下拉
+  document.addEventListener('click', closeSelects);
+
+  let floatTipEl = null;
+  /** 在 body 层显示统一说明气泡（避开 rank 表 overflow:hidden 的裁剪，悬浮于视口） */
+  function showFloatTip(html, mod, x, y) {
+    if (!floatTipEl) {
+      floatTipEl = document.createElement('div');
+      floatTipEl.className = 'float-tip';
+      document.body.appendChild(floatTipEl);
+    }
+    floatTipEl.className = 'float-tip show' + (mod ? ' ' + mod : '');
+    floatTipEl.innerHTML = html;
+    // 先放左上角测出尺寸，再平移回视口内（鼠标右下）
+    floatTipEl.style.left = '0px';
+    floatTipEl.style.top = '0px';
+    const w = floatTipEl.offsetWidth;
+    const h = floatTipEl.offsetHeight;
+    let left = x + 12;
+    let top = y + 14;
+    if (left + w > window.innerWidth - 8) left = x - w - 12;
+    if (top + h > window.innerHeight - 8) top = y - h - 10;
+    floatTipEl.style.left = Math.max(8, left) + 'px';
+    floatTipEl.style.top = Math.max(8, top) + 'px';
+  }
+  /** 隐藏说明气泡 */
+  function hideFloatTip() {
+    if (floatTipEl) floatTipEl.classList.remove('show');
+  }
+  /**
+   * 为所有带 data-tip 的徽标绑定悬浮说明：委托监听 mouseover/mousedown/scroll。
+   * 气泡挂到 body 而非徽标内部，避免被排行表包装层的 overflow 裁剪。
+   */
+  function bindBadgeTips() {
+    document.addEventListener('mouseover', (e) => {
+      const el = e.target.closest('.badge[data-tip]');
+      if (!el) { hideFloatTip(); return; }
+      const r = el.getBoundingClientRect();
+      const mod = el.classList.contains('wb-badge') ? 'wb'
+        : el.classList.contains('truck-badge') ? 'truck'
+        : el.classList.contains('trap-badge') ? 'trap' : 'hot';
+      showFloatTip(el.getAttribute('data-tip'), mod, r.left + r.width / 2, r.bottom);
+    });
+    document.addEventListener('mousedown', hideFloatTip, true);
+    window.addEventListener('scroll', hideFloatTip, true);
+  }
+
+  /** 设置页「标识体系」各条目底部的真实徽标预览，与排行表/热力图完全同源（同一套 classes 与配色） */
+  function renderBadgePreviews() {
+    const s = loadSettings();
+    const num = (v, def) => (v === undefined || v === '') ? def : v;
+    const html = {
+      hot: `${icon('fire')}快速升温<span class="bp-hint">近 ${num(s.hotHours, 3)} 小时新出现 ≥${num(s.hotMin, 5)} 场 · 占比 ≥${num(s.hotRate, 10)}%</span>`,
+      wb: `${icon('star')}白板之光<span class="bp-hint">低红段 ≥${num(s.wbMin, 5)} 场 · 胜率 ≥${num(s.wbRate, 51)}%</span>`,
+      truck: `${icon('truck')}泥头车<span class="bp-hint">胜率 ≥${num(s.truckRate, 60)}%</span>`,
+      trap: `${icon('warn')}陷阱<span class="bp-hint">≥${num(s.trapMin, 20)} 场 · 胜率 &lt;50%</span>`,
+    };
+    document.querySelectorAll('.badge-preview').forEach((el) => {
+      el.innerHTML = html[el.dataset.kind] ? `<span class="badge ${el.dataset.kind}-badge">${html[el.dataset.kind]}</span>` : '';
+    });
+  }
+
   const localWrap = document.getElementById('local-wrap');
   const localMenu = document.getElementById('local-menu');
   const cloudWrap = document.getElementById('cloud-wrap');
@@ -298,10 +496,10 @@
    */
   function openConfirm(opts = {}) {
     return new Promise((resolve) => {
-      const { title = '确认操作', message = '', okText = '确定', okClass = 'btn-primary', icon = '⚠️' } = opts;
+      const { title = '确认操作', message = '', okText = '确定', okClass = 'btn-primary', icon: iconName = 'warn' } = opts;
       modalTitle.textContent = title;
       modalMsg.textContent = message;
-      modalIcon.textContent = icon;
+      modalIcon.innerHTML = icon(iconName);
       modalOk.textContent = okText;
       modalOk.className = 'btn ' + okClass;
       modalEl.classList.remove('hidden');
@@ -327,8 +525,8 @@
 
   /** 单按钮提示框（替代原生 alert） */
   function openAlert(message, opts = {}) {
-    const { title = '提示', icon = 'ℹ️' } = opts;
-    return openConfirm({ title, message, icon, okText: '知道了', okClass: 'btn-primary' });
+    const { title = '提示', icon: iconName = 'info' } = opts;
+    return openConfirm({ title, message, icon: iconName, okText: '知道了', okClass: 'btn-primary' });
   }
 
   /**
@@ -338,10 +536,10 @@
    */
   function openPassword(opts = {}) {
     return new Promise((resolve) => {
-      const { title = '口令确认', message = '', okText = '确定', okClass = 'btn-danger', icon = '🔒', placeholder = '请输入操作口令' } = opts;
+      const { title = '口令确认', message = '', okText = '确定', okClass = 'btn-danger', icon: iconName = 'lock', placeholder = '请输入操作口令' } = opts;
       modalTitle.textContent = title;
       modalMsg.textContent = message;
-      modalIcon.textContent = icon;
+      modalIcon.innerHTML = icon(iconName);
       modalOk.textContent = okText;
       modalOk.className = 'btn ' + okClass;
       modalInput.placeholder = placeholder;
@@ -380,7 +578,7 @@
       message: '即将从云端【下载】数据并覆盖当前本地数据。\n本地未归档的记录将被替换，此操作不可恢复。',
       okText: '下载并覆盖',
       okClass: 'btn-danger',
-      icon: '⬇️',
+      icon: 'download',
     });
     if (!ok) return;
     setStatus('loading', '正在从云端下载数据…');
@@ -388,13 +586,13 @@
       const res = await fetch('/api/cloud/pull');
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || '云端下载失败');
-      setStatus('warn', `✅ 已从云端下载并覆盖本地，共 ${data.total} 条记录`);
+      setStatus('warn', `已从云端下载并覆盖本地，共 ${data.total} 条记录`);
       // 本地数据已变更：失效分析缓存并刷新联盟筛选，与分析页一致
       delete analyzeResultEl.dataset.last;
       refreshAllianceChips();
       if (!tabAnalyze.classList.contains('hidden')) loadAnalysis();
     } catch (e) {
-      setStatus('error', `❌ 云端下载失败：${e.message}`);
+      setStatus('error', `云端下载失败：${e.message}`);
     }
   });
 
@@ -406,7 +604,7 @@
       message: '即将把本地数据与云端数据【合并去重】后写回云端（records.json）。\n云端已存在的记录会保留，仅并入本地新增记录。',
       okText: '上传并合并',
       okClass: 'btn-danger',
-      icon: '⬆️',
+      icon: 'upload',
     });
     if (!ok) return;
     setStatus('loading', '正在合并上传到云端…');
@@ -414,11 +612,11 @@
       const res = await fetch('/api/cloud/push', { method: 'POST' });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || '云端上传失败');
-      let msg = `✅ 云端合并完成：共 ${data.total} 条（本次新增 ${data.added} 条）`;
+      let msg = `云端合并完成：共 ${data.total} 条（本次新增 ${data.added} 条）`;
       if (data.skipped) msg += `，忽略无效数据 ${data.skipped} 条`;
       setStatus('warn', msg);
     } catch (e) {
-      setStatus('error', `❌ 云端上传失败：${e.message}`);
+      setStatus('error', `云端上传失败：${e.message}`);
     }
   });
 
@@ -429,7 +627,7 @@
       message: '即将清空 JSONBin 云端保存的全部战报数据（records.json）。\n此操作不可恢复，仅影响云端，不影响本地数据。\n请输入操作口令确认：',
       okText: '清空',
       okClass: 'btn-danger',
-      icon: '🗑️',
+      icon: 'trash',
     });
     if (pw == null) return;
     try {
@@ -440,9 +638,9 @@
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || '清空失败');
-      openAlert(`口令验证通过，云端数据已清空（原 ${data.cleared} 条）。`, { title: '清空完成', icon: '✅' });
+      openAlert(`口令验证通过，云端数据已清空（原 ${data.cleared} 条）。`, { title: '清空完成', icon: 'check' });
     } catch (e) {
-      openAlert(e.message, { title: '操作失败', icon: '❌' });
+      openAlert(e.message, { title: '操作失败', icon: 'error' });
     }
   });
 
@@ -461,6 +659,31 @@
   let currentView = 'rank';
   /** 胜率排序方向：null 不排（按场次）、'desc' 降序、'asc' 升序 */
   let rateSort = null;
+
+  // ==================== 全屏查看（排行 / 热力图） ====================
+  const fsView = document.getElementById('fs-view');
+  const fsBody = document.getElementById('fs-body');
+  const fsAllianceEl = document.getElementById('fs-alliance');
+  const fsHours = document.getElementById('fs-hours');
+  const fsHp = document.getElementById('fs-hp');
+  const fsCount = document.getElementById('fs-count');
+  const fsColor = document.getElementById('fs-color');
+  /** 全屏查看内部可变状态：当前子视图/排序/同盟筛选/数据缓存（集中在一对象，避免零散顶层变量） */
+  const fsState = { currentView: 'rank', rateSort: null, alliance: '', data: null };
+  /** 生成胜率表头排序按钮（不排=双向箭头、desc=升序箭头、asc=降序箭头），主页面与全屏共用 */
+  function sortHeaderBtn(s) {
+    const ic = s === null ? 'sort' : s === 'desc' ? 'sortAsc' : 'sortDesc';
+    const active = s ? ' active' : '';
+    return `<button type="button" class="sort-btn${active}" data-sort="rate" aria-label="按胜率排序">胜率 <span>${icon(ic)}</span></button>`;
+  }
+  /** 循环切换排序方向：null → desc → asc → null */
+  function nextSort(s) {
+    return s === null ? 'desc' : s === 'desc' ? 'asc' : null;
+  }
+  /** 按胜率比较器（asc 升序 / desc 降序），主页面与全屏共用 */
+  function byWinRate(s) {
+    return (a, b) => (s === 'asc' ? a.winRate - b.winRate : b.winRate - a.winRate);
+  }
 
   // ==================== 设置 ====================
   const tabSettings = document.getElementById('tab-settings');
@@ -521,6 +744,8 @@
     tabAnalyze.classList.toggle('hidden', tab !== 'analyze');
     tabSettings.classList.toggle('hidden', tab !== 'settings');
     if (tab === 'analyze') {
+      // 首次打开分析页时先套用「有效战报默认口径」为筛选器初值，再加载
+      if (!caliberApplied) { applyDefaultCaliber(); caliberApplied = true; }
       loadAnalysis();
     }
     if (tab === 'settings') fillSettingsForm(loadSettings());
@@ -548,29 +773,35 @@
     if (bar) bar.remove();
   }
 
+  /** 将「有效战报默认口径」(settings 的 count/hp) 套用到分析页筛选器：取不大于目标值的最大档位 */
+  let caliberApplied = false;
+  function applyDefaultCaliber() {
+    selectLargestAtMost(countSel, Number(loadSettings().count) || 0);
+    selectLargestAtMost(hpSel, Number(loadSettings().hp) || 0);
+  }
+  /** 在下拉控件中选中 data-val ≤ 目标的最后一个档位（首项为「全部」），并同步高亮与文本 */
+  function selectLargestAtMost(dd, target) {
+    const opts = Array.from(dd.querySelectorAll('.sel-opt'));
+    let chosen = opts[0] || null;
+    for (const o of opts) if (Number(o.dataset.val) <= target) chosen = o;
+    if (!chosen) return;
+    dd.dataset.value = chosen.dataset.val;
+    const t = dd.querySelector('.sel-text');
+    if (t) t.textContent = chosen.textContent.trim();
+    opts.forEach((o) => o.classList.toggle('active', o === chosen));
+  }
+
   /** 加载分析数据 */
   async function loadAnalysis() {
     // 每次加载/刷新分析时同步刷新同盟筛选列表，确保新识别的同盟实时出现在下拉中
     refreshAllianceChips();
     const params = new URLSearchParams();
     if (currentAlliance) params.set('alliance', currentAlliance);
-    if (Number(hoursSel.value) > 0) params.set('hours', hoursSel.value);
-    if (Number(hpSel.value) > 0) params.set('minHp', hpSel.value);
-    if (Number(countSel.value) > 0) params.set('minCount', countSel.value);
-    // 快速升温阈值由设置页驱动，随每次分析请求下发
-    const s = loadSettings();
-    params.set('hotMin', s.hotMin || DEFAULT_SETTINGS.hotMin);
-    params.set('hotRate', s.hotRate || DEFAULT_SETTINGS.hotRate);
-    params.set('hotHours', s.hotHours || DEFAULT_SETTINGS.hotHours);
-    // 白板之光 / 泥头车判定阈值由设置页独立下发
-    params.set('wbRate', s.wbRate || DEFAULT_SETTINGS.wbRate);
-    // wbMin 允许显式填 0（不设场次门槛），故仅当为空字符串时才回退默认值
-    params.set('wbMin', (s.wbMin === undefined || s.wbMin === '') ? DEFAULT_SETTINGS.wbMin : s.wbMin);
-    params.set('truckRate', s.truckRate || DEFAULT_SETTINGS.truckRate);
-    // truckMin 允许显式填 0（不设场次门槛），故仅当为空字符串时才回退默认值
-    params.set('truckMin', (s.truckMin === undefined || s.truckMin === '') ? DEFAULT_SETTINGS.truckMin : s.truckMin);
-    // trapMin 允许显式填 0（不设场次门槛），故仅当为空字符串时才回退默认值
-    params.set('trapMin', (s.trapMin === undefined || s.trapMin === '') ? DEFAULT_SETTINGS.trapMin : s.trapMin);
+    if (Number(hoursSel.dataset.value || 0) > 0) params.set('hours', hoursSel.dataset.value);
+    if (Number(hpSel.dataset.value || 0) > 0) params.set('minHp', hpSel.dataset.value);
+    if (Number(countSel.dataset.value || 0) > 0) params.set('minCount', countSel.dataset.value);
+    // 快速升温 / 白板之光 / 泥头车 / 陷阱判定阈值由设置页驱动，随本次分析请求下发（与全屏共用同一复用函数）
+    appendThresholdParams(params);
     // 记录当前滚动位置，筛选切换后保持浏览位置不变，不再跳回顶部
     const prevScroll = window.scrollY;
     // 已有内容时保留旧数据，仅显示顶部细加载条，避免内容清空导致高度塌陷、滚动被钳制回顶
@@ -587,7 +818,7 @@
       // 渲染完成后恢复原滚动位置
       requestAnimationFrame(() => window.scrollTo(0, prevScroll));
     } catch (e) {
-      analyzeResultEl.innerHTML = `<div class="status error">❌ ${e.message}</div>`;
+      analyzeResultEl.innerHTML = `<div class="status error">${icon('error')} ${e.message}</div>`;
     } finally {
       hideLoadingBar();
     }
@@ -628,35 +859,24 @@
     }, 200);
   });
 
-  /** 无数据时提示 */
-  /** 胜率表头排序按钮：↕ 悬停提示，激活时按方向显示 ▲/▼ */
-  function rateHeaderBtn() {
-    const icon = rateSort === null ? '↕' : rateSort === 'desc' ? '▲' : '▼';
-    const active = rateSort ? ' active' : '';
-    return `<button type="button" class="sort-btn${active}" data-sort="rate" aria-label="按胜率排序">胜率 <span>${icon}</span></button>`;
-  }
-
   /** 渲染「阵容胜率排行」子页面 */
   function renderRanking(data, colorOn) {
     // 前 30 榜单：默认展示场次最多（且胜率次优）的前 30 个阵容；点胜率表头可按胜率升降序
     const TOP_N = 30;
     let comps = data.comps;
-    if (rateSort) {
-      comps = [...comps].sort((a, b) =>
-        rateSort === 'asc' ? a.winRate - b.winRate : b.winRate - a.winRate
-      );
-    }
+    if (rateSort) comps = [...comps].sort(byWinRate(rateSort));
     const topComps = comps.slice(0, TOP_N);
     return `
-      <h3 class="section-title">🏆 阵容胜率排行
+      <h3 class="section-title">${icon('trophy')} 阵容胜率排行
         <span class="top-badge">前 ${topComps.length}</span>
+        <button type="button" class="expand-btn" data-view="rank" title="展开铺满窗口查看">${icon('expand')} 展开</button>
       </h3>
       <p class="record-count">已收录 <b>${data.total}</b> 场战斗</p>
       <div class="table-wrap rank-table-wrap">
         <table class="rank-table">
           <thead>
             <tr>
-              <th>#</th><th>阵容</th><th>${rateHeaderBtn()}</th><th>平均红度</th>
+              <th>#</th><th>阵容</th><th>${sortHeaderBtn(rateSort)}</th><th>平均红度</th>
               ${BRACKET_ORDER.map((b) => `<th class="bracket-th">${b}<i>胜率</i></th>`).join('')}
             </tr>
           </thead>
@@ -677,8 +897,8 @@
    * 按当前容器宽度计算矩阵可完整展示的阵容列数：
    * 窗口越窄展示的阵容越少（始终取场次最多的前 N），从而任何视口都无横向滚动条且内容完整。
    */
-  function matrixColCount() {
-    const wrap = document.querySelector('.table-wrap.matrix-wrap') || analyzeResultEl;
+  function matrixColCount(container) {
+    const wrap = (container || analyzeResultEl).querySelector('.table-wrap.matrix-wrap') || analyzeResultEl;
     const width = (wrap && wrap.clientWidth) || 800;
     const cols = Math.max(4, Math.floor((width - 40) / MATRIX_MIN_COL));
     return Math.min(MATRIX_MAX_COMP, cols);
@@ -689,13 +909,14 @@
     const compStat = new Map(data.comps.map((c) => [c.comp, c]));
     const comps = data.matrix.comps.slice(0, matrixColCount());
     return `
-      <h3 class="section-title">🔥 对战热力图（前 ${comps.length} 阵容）
+      <h3 class="section-title">${icon('fire')} 对战热力图（前 ${comps.length} 阵容）
         <span class="heat-legend">
           <span class="heat-legend-label" style="left:0%">0%</span>
           <span class="heat-legend-label" style="left:50%">50%</span>
           <span class="heat-legend-label" style="left:100%">100%</span>
           <span class="heat-legend-bar"></span>
         </span>
+        <button type="button" class="expand-btn" data-view="matrix" title="展开铺满窗口查看">${icon('expand')} 展开</button>
       </h3>
       <div class="table-wrap matrix-wrap">
         <table class="matrix-table">
@@ -729,23 +950,29 @@
       .join('');
   }
 
-  /** 阵容标识徽标（快速升温 / 白板之光 / 泥头车 / 陷阱），悬停显示判定说明；可在设置页独立开关显示 */
+  /**
+   * 阵容标识徽标（快速升温 / 白板之光 / 泥头车 / 陷阱）。
+   * 渲染为克制的柔色小标签（.badge + 语义色），悬停通过 data-tip 交给全局浮动说明气泡显示判定标准。
+   * @returns {string} 在排行表「场次」后内联插入的徽标 HTML
+   */
   function rankBadges(c) {
     const s = loadSettings();
     // 数值门槛取值：显式填 0（不限）时原样展示，仅空串/缺失时才回落默认值
     const num = (v, def) => (v === undefined || v === '') ? def : v;
+    // 悬停说明：<b>名称</b> + 具体判定标准
+    const tip = (name, desc) => `<b>${name}</b><span>${desc}</span>`;
     let h = '';
     if (c.hot && s.hotShow !== '0') {
-      h += `<span class="hot-badge"><span class="flame">🔥</span>快速升温<span class="hot-tip">近 ${num(s.hotHours, 3)} 小时新出现、至少 ${num(s.hotMin, 5)} 场，占比 ≥ ${num(s.hotRate, 10)}%</span></span>`;
+      h += `<span class="badge hot-badge" data-tip="${tip('快速升温', `近 ${num(s.hotHours, 3)} 小时新出现、至少 ${num(s.hotMin, 5)} 场，且占该时段总场次 ≥ ${num(s.hotRate, 10)}%`)}">${icon('fire')}快速升温</span>`;
     }
     if (c.whiteBoard && s.wbShow !== '0') {
-      h += `<span class="wb-badge">🔆 白板之光<span class="hot-tip">「0-5红」低红段内场次 ≥${num(s.wbMin, 5)} 且该段胜率 ≥${num(s.wbRate, 51)}%</span></span>`;
+      h += `<span class="badge wb-badge" data-tip="${tip('白板之光', `「0-5红」低红分段内场次 ≥${num(s.wbMin, 5)} 且该段胜率 ≥${num(s.wbRate, 51)}%`)}">${icon('star')}白板之光</span>`;
     }
     if (c.truck && s.truckShow !== '0') {
-      h += `<span class="truck-badge">🚚 泥头车<span class="hot-tip">胜率 ≥${num(s.truckRate, 60)}%</span></span>`;
+      h += `<span class="badge truck-badge" data-tip="${tip('泥头车', `胜率 ≥${num(s.truckRate, 60)}% 的超高胜率阵容`)}">${icon('truck')}泥头车</span>`;
     }
     if (c.trap && s.trapShow !== '0') {
-      h += `<span class="trap-badge">⚠️ 陷阱<span class="hot-tip">场次 ≥${num(s.trapMin, 20)} 且胜率 &lt;50%，谨慎使用</span></span>`;
+      h += `<span class="badge trap-badge" data-tip="${tip('陷阱', `场次 ≥${num(s.trapMin, 20)} 且总体胜率 &lt;50%，谨慎使用`)}">${icon('warn')}陷阱</span>`;
     }
     return h;
   }
@@ -803,6 +1030,183 @@
       </tr>`;
   }
 
+  // ==================== 全屏查看（排行 / 热力图） ====================
+
+  /** 全屏热力图列数：按全屏容器宽度计算，最多仍受 MATRIX_MAX_COMP 限制（避免超宽） */
+  function fsMatrixCols() {
+    const width = (fsBody && fsBody.clientWidth) || 900;
+    const cols = Math.max(6, Math.floor((width - 60) / MATRIX_MIN_COL));
+    return Math.min(MATRIX_MAX_COMP, cols);
+  }
+
+  /** 全屏「阵容胜率排行」表格：显示全部阵容（不截断前 30），支持本地排序 */
+  function fsRenderRanking(data, colorOn) {
+    let comps = data.comps;
+    if (fsState.rateSort) comps = [...comps].sort(byWinRate(fsState.rateSort));
+    return `
+      <div class="fs-stat">已收录 <b>${data.total}</b> 场 · 共 <b>${comps.length}</b> 个阵容</div>
+      <div class="table-wrap rank-table-wrap fs-rank-wrap">
+        <table class="rank-table fs-rank-table">
+          <thead>
+            <tr>
+              <th>#</th><th>阵容</th><th>${sortHeaderBtn(fsState.rateSort)}</th><th>平均红度</th>
+              ${BRACKET_ORDER.map((b) => `<th class="bracket-th">${b}<i>胜率</i></th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${comps.map((c, i) => rankRow(c, i, colorOn)).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  /** 全屏「对战热力图」表格：按全屏宽度展示更多阵容列 */
+  function fsRenderMatrix(data, colorOn) {
+    const compStat = new Map(data.comps.map((c) => [c.comp, c]));
+    const comps = data.matrix.comps.slice(0, fsMatrixCols());
+    return `
+      <div class="heat-legend fs-legend">
+        <span class="heat-legend-label" style="left:0%">0%</span>
+        <span class="heat-legend-label" style="left:50%">50%</span>
+        <span class="heat-legend-label" style="left:100%">100%</span>
+        <span class="heat-legend-bar"></span>
+      </div>
+      <div class="table-wrap matrix-wrap fs-matrix-wrap">
+        <table class="matrix-table fs-matrix-table">
+          <thead>
+            <tr>
+              <th class="corner"><span>核心阵容↓</span><span>对手阵容→</span></th>
+              ${comps.map((c) => matrixHeader(c, compStat)).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${comps.map((row) => matrixRow(row, data.matrix, compStat, colorOn, comps)).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  /** 依据全屏当前视图 + 缓存数据重绘表格（颜色开关/排序/切表时调用，不重新请求） */
+  function paintFullscreen() {
+    if (!fsState.data) return;
+    const colorOn = fsColor.checked;
+    fsBody.innerHTML =
+      fsState.currentView === 'matrix' ? fsRenderMatrix(fsState.data, colorOn) : fsRenderRanking(fsState.data, colorOn);
+  }
+
+  /** 为请求参数追加「标识体系」判定阈值（与主分析页一致，读设置页配置） */
+  function appendThresholdParams(params) {
+    const s = loadSettings();
+    params.set('hotMin', s.hotMin || DEFAULT_SETTINGS.hotMin);
+    params.set('hotRate', s.hotRate || DEFAULT_SETTINGS.hotRate);
+    params.set('hotHours', s.hotHours || DEFAULT_SETTINGS.hotHours);
+    params.set('wbRate', s.wbRate || DEFAULT_SETTINGS.wbRate);
+    params.set('wbMin', (s.wbMin === undefined || s.wbMin === '') ? DEFAULT_SETTINGS.wbMin : s.wbMin);
+    params.set('truckRate', s.truckRate || DEFAULT_SETTINGS.truckRate);
+    params.set('truckMin', (s.truckMin === undefined || s.truckMin === '') ? DEFAULT_SETTINGS.truckMin : s.truckMin);
+    params.set('trapMin', (s.trapMin === undefined || s.trapMin === '') ? DEFAULT_SETTINGS.trapMin : s.trapMin);
+  }
+
+  /** 全屏视图按当前筛选条件请求并渲染表格 */
+  function renderFullscreen() {
+    if (!fsView || fsView.classList.contains('hidden')) return;
+    const params = new URLSearchParams();
+    if (fsState.alliance) params.set('alliance', fsState.alliance);
+    if (Number(fsHours.dataset.value || 0) > 0) params.set('hours', fsHours.dataset.value);
+    if (Number(fsHp.dataset.value || 0) > 0) params.set('minHp', fsHp.dataset.value);
+    if (Number(fsCount.dataset.value || 0) > 0) params.set('minCount', fsCount.dataset.value);
+    appendThresholdParams(params);
+    fsBody.innerHTML = '<div class="status loading">加载统计中…</div>';
+    fetch('/api/analyze?' + params.toString())
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data || data.error) throw new Error((data && data.error) || '加载失败');
+        fsState.data = data;
+        paintFullscreen();
+      })
+      .catch((e) => {
+        fsBody.innerHTML = `<div class="status error">${icon('error')} ${e.message}</div>`;
+      });
+  }
+
+  /** 全屏同盟筛选 chips 的 HTML：首项「全部」 */
+  function fsAllianceChipsHTML(alliances, active) {
+    return ['', ...alliances]
+      .map((a) => `<button type="button" class="chip ${a === active ? 'active' : ''}" data-alliance="${a}">${a || '全部'}</button>`)
+      .join('');
+  }
+  /** 拉取同盟列表填充全屏筛选 chips，并绑定点击切换筛选后刷新 */
+  function fsRefreshAllianceChips(list) {
+    const fill = (alliances) => {
+      fsAllianceEl.innerHTML = fsAllianceChipsHTML(alliances, fsState.alliance);
+      Array.from(fsAllianceEl.querySelectorAll('.chip')).forEach((chip) => {
+        chip.addEventListener('click', () => {
+          fsState.alliance = chip.dataset.alliance || '';
+          fsAllianceEl.querySelectorAll('.chip').forEach((x) => x.classList.toggle('active', x === chip));
+          renderFullscreen();
+        });
+      });
+    };
+    if (list) return fill(list);
+    fetch('/api/records')
+      .then((res) => res.json())
+      .then((data) => fill([...new Set((data.items || []).map((r) => r.alliance).filter(Boolean))].sort()))
+      .catch(() => fill([]));
+  }
+
+  /** 全屏视图标题与子页签高亮同步 */
+  function setFsTab() {
+    document.getElementById('fs-title-txt').textContent = fsState.currentView === 'matrix' ? '对战热力图' : '阵容胜率排行';
+    Array.from(document.querySelectorAll('.fs-tab')).forEach((t) =>
+      t.classList.toggle('active', t.dataset.view === fsState.currentView)
+    );
+  }
+
+  /** 打开全屏查看（默认展示主页面当前子视图，筛选从「全部/不限」独立开始） */
+  function openFullscreen(view) {
+    if (!fsView) return;
+    fsState.currentView = (view === 'matrix' || view === 'rank') ? view : (currentView || 'rank');
+    fsState.rateSort = null;
+    fsState.alliance = '';
+    fsState.data = null;
+    setFsTab();
+    fsView.classList.remove('hidden');
+    document.body.classList.add('fs-lock');
+    fsRefreshAllianceChips();
+    renderFullscreen();
+  }
+  /** 关闭全屏查看 */
+  function closeFullscreen() {
+    if (!fsView) return;
+    fsView.classList.add('hidden');
+    document.body.classList.remove('fs-lock');
+  }
+
+  /** 全屏胜率排序：点击表头在 不排 → 降序 → 升序 间循环，基于缓存数据本地重排 */
+  function fsCycleRateSort() {
+    fsState.rateSort = nextSort(fsState.rateSort);
+    paintFullscreen();
+  }
+
+  // 主分析结果区点击「展开」按钮 → 打开对应子视图全屏
+  analyzeResultEl.addEventListener('click', (e) => {
+    const btn = e.target.closest && e.target.closest('.expand-btn');
+    if (btn) openFullscreen(btn.dataset.view);
+  });
+
+  // 全屏内交互：子页签切换、胜率排序、颜色开关、关闭
+  fsView.addEventListener('click', (e) => {
+    const tab = e.target.closest && e.target.closest('.fs-tab');
+    if (tab) { fsState.currentView = tab.dataset.view; setFsTab(); paintFullscreen(); return; }
+    const sortBtn = e.target.closest && e.target.closest('[data-sort="rate"]');
+    if (sortBtn) { fsCycleRateSort(); return; }
+    if (e.target.closest('#fs-close')) closeFullscreen();
+  });
+  fsColor.addEventListener('change', () => paintFullscreen());
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && fsView && !fsView.classList.contains('hidden')) closeFullscreen();
+  });
+
   /**
    * 胜率颜色映射（<50% 红系、>50% 绿系、恰好 50% 中性）。
    * 主流显示方式：以 50% 为硬分界，两侧各自从浅色渐变到深色——
@@ -851,14 +1255,14 @@
 
   /**
    * 胜率连续渐变着色：>50% 绿、<50% 红（与热力图同一套 winRateColor）。
-   * 返回带背景染色 + 同色辉光的底框样式，让色块在暗背景下更醒目直观。
+   * 扁平半透明色块 + 细描边，不叠辉光，深浅主题下均清晰可辨。
    */
   function colorByRate(rate) {
     const c = winRateColor(rate);
     if (!c) return `background:rgba(130,140,152,0.15);color:var(--text-dim);`;
     const fg = textColorFor(c);
     const ch = `${c[0]},${c[1]},${c[2]}`;
-    return `background:rgba(${ch},0.52);border-color:rgba(${ch},0.65);box-shadow:0 0 12px rgba(${ch},0.35);color:${fg};`;
+    return `background:rgba(${ch},0.52);border-color:rgba(${ch},0.65);color:${fg};`;
   }
 
   // ---- 分析页交互 ----
@@ -878,14 +1282,15 @@
   });
   document.getElementById('btn-refresh').addEventListener('click', loadAnalysis);
 
-  // ---------- 设置页：保存 / 恢复默认 ----------
-  document.getElementById('btn-save-settings').addEventListener('click', () => {
-    // 读取并校验各控件值（数字类 clamp 到合法区间），非法时回退默认
+  // ---------- 设置页：自动保存 / 恢复默认 ----------
+
+  /** 收集并校验设置表单全部值（数字类 clamp 到合法区间，非法回退默认） */
+  function collectSettings() {
     const clamp = (v, min, max, dflt) => {
       const n = Math.round(Number(v));
       return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : dflt;
     };
-    const s = {
+    return {
       count: String(clamp(settingsEls.count.value, 0, 500, 0)),
       hp: String(clamp(settingsEls.hp.value, 0, 33000, 0)),
       hotHours: String(clamp(settingsEls.hotHours.value, 1, 24, 3)),
@@ -901,25 +1306,45 @@
       trapMin: String(clamp(settingsEls.trapMin.value, 0, 100, 20)),
       trapShow: settingsEls.trapShow.checked ? '1' : '0',
     };
+  }
+  /** 自动保存：读取/校验全部设置 → 持久化 → 回填修正后的值 → 提示，应用口径并刷新分析页 */
+  function autoSaveSettings() {
+    const s = collectSettings();
     saveSettings(s);
+    fillSettingsForm(s); // 回填 clamp 后的合法值（超界输入会被就地修正）
     showSettingsToast('已保存 ✓');
-    // 若当前正停在分析页，刷新一次使快速升温阈值立即生效
-    if (!tabAnalyze.classList.contains('hidden')) loadAnalysis();
-  });
+    caliberApplied = false; // 确保下次进入分析页按最新「有效战报默认口径」套用
+    if (!tabAnalyze.classList.contains('hidden')) {
+      applyDefaultCaliber();
+      loadAnalysis();
+    }
+  }
+  // 每个设置控件变更时自动保存（数字输入在失焦/回车触发，开关在切换时触发）
+  Object.values(settingsEls).forEach((el) => el.addEventListener('change', autoSaveSettings));
   document.getElementById('btn-reset-settings').addEventListener('click', () => {
     fillSettingsForm(DEFAULT_SETTINGS);
-    showSettingsToast('已恢复默认值，点击「保存设置」生效');
+    saveSettings({ ...DEFAULT_SETTINGS });
+    showSettingsToast('已恢复默认值 ✓');
+    caliberApplied = false;
+    if (!tabAnalyze.classList.contains('hidden')) {
+      applyDefaultCaliber();
+      loadAnalysis();
+    }
   });
   // 胜率表头排序：点击在 不排 → 降序 → 升序 → 不排 间循环，基于已加载数据本地重排，不发请求
   analyzeResultEl.addEventListener('click', (e) => {
     const sortBtn = e.target.closest && e.target.closest('[data-sort="rate"]');
     if (!sortBtn) return;
-    rateSort = rateSort === null ? 'desc' : rateSort === 'desc' ? 'asc' : null;
+    rateSort = nextSort(rateSort);
     if (analyzeResultEl.dataset.last) renderAnalysis(JSON.parse(analyzeResultEl.dataset.last));
   });
-  hoursSel.addEventListener('change', loadAnalysis);
-  hpSel.addEventListener('change', loadAnalysis);
-  countSel.addEventListener('change', loadAnalysis);
+  initSelect(hoursSel, () => loadAnalysis());
+  initSelect(hpSel, () => loadAnalysis());
+  initSelect(countSel, () => loadAnalysis());
+  // 全屏视图内筛选下拉：变更后直接按新条件重新请求并渲染
+  initSelect(fsHours, () => renderFullscreen());
+  initSelect(fsHp, () => renderFullscreen());
+  initSelect(fsCount, () => renderFullscreen());
   colorToggle.addEventListener('change', () => {
     // 颜色开关变化时仅重绘当前已加载的数据，避免重复请求
     if (analyzeResultEl.dataset.last) {
@@ -932,7 +1357,7 @@
       message: '确定清空全部已识别的战斗记录？\n此操作不可恢复。',
       okText: '清空',
       okClass: 'btn-danger',
-      icon: '🗑️',
+      icon: 'trash',
     });
     if (!ok) return;
     try {
@@ -978,6 +1403,9 @@
   }
 
   refreshAllianceChips();
+  // 全局徽标说明气泡 + 设置页标识预览（需在 DEFAULT_SETTINGS / loadSettings 定义之后调用）
+  bindBadgeTips();
+  renderBadgePreviews();
   // 刷新后恢复上次停留的标签页（默认战报识别页），保持用户停留的原页面
   try {
     activateTab(localStorage.getItem('zabao.tab') || 'parse');
