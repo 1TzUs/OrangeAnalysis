@@ -868,14 +868,18 @@
       trendChartEl.innerHTML = `<div class="status error">${icon('error')} ${e.message}</div>`;
     }
   }
+  /** 走势请求序号：快速切换窗口/阵容时用于丢弃过期响应，避免旧请求覆盖新图表（竞态防护） */
+  let trendReqSeq = 0;
   /** 渲染某阵容近 N 天走势（内联 SVG 柱状图，纯原生无三方库） */
   function renderTrend(comp) {
     if (!comp) return;
     trendChartEl.innerHTML = `<div class="status loading">加载走势中…</div>`;
+    const reqId = ++trendReqSeq; // 记录本次请求序号，响应/异常均需校验仍为最新才渲染
     const params = insightParams({ comp, days: insightDays.dataset.value || '14' });
     fetch('/api/analyze/trend?' + params.toString())
       .then((r) => r.json())
       .then((data) => {
+        if (reqId !== trendReqSeq) return; // 已不是最新请求，丢弃过期结果
         if (data.error) throw new Error(data.error);
         const points = data.points || [];
         const total = points.reduce((s, p) => s + p.total, 0);
@@ -889,9 +893,12 @@
         const innerH = H - padT - padB;
         const bw = plotW / points.length;
         const maxRate = 100; // 胜率天然 0-100，柱高按 100% 归一即可
+        // 柱几何统一推导（柱高按胜率 100% 归一、活跃日至少 2px，柱顶 y 依内边距）；主图与柱顶数值标注共用，避免重复推导
+        const bh = (p) => (p.total ? Math.max(2, (p.winRate / maxRate) * innerH) : 0);
+        const by = (h) => H - padB - h;
         const bars = points.map((p, i) => {
-          const h = p.total ? Math.max(2, (p.winRate / maxRate) * innerH) : 0;
-          const y = H - padB - h;
+          const h = bh(p);
+          const y = by(h);
           const c = winRateColor(p.winRate);
           const fill = c ? `rgb(${c.join(',')})` : '#8b98ad';
           return `<rect x="${padL + i * bw + bw * 0.18}" y="${y}" width="${bw * 0.64}" height="${h}" rx="2" fill="${fill}" title="${escHtml(p.day)}：出场 ${p.total} 场 · ${p.wins} 胜 · 胜率 ${p.winRate}%"/>`;
@@ -936,8 +943,7 @@
           }
           return shown.map((i) => {
             const p = points[i];
-            const h = p.total ? Math.max(2, (p.winRate / maxRate) * innerH) : 0;
-            const vy = Math.max(12, H - padB - h - 5); // 下限保护：高柱胜率文字不至于顶穿 SVG 上边界
+            const vy = Math.max(12, by(bh(p)) - 5); // 下限保护：高柱胜率文字不至于顶穿 SVG 上边界
             return `<text x="${padL + i * bw + bw * 0.5}" y="${vy}" text-anchor="middle" class="trend-val">${p.winRate}%</text>`;
           }).join('');
         })();
@@ -951,7 +957,7 @@
           </div>`;
         trendChartEl.innerHTML = `<div class="trend-frame"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="trend-svg" role="img" aria-label="${escHtml(comp)} 近${data.days}天胜率走势">${grid}${base}${bars}${vals}${ticks}</svg></div>${metrics}`;
       })
-      .catch((e) => { trendChartEl.innerHTML = `<div class="status error">${icon('error')} ${e.message}</div>`; });
+      .catch((e) => { if (reqId !== trendReqSeq) return; trendChartEl.innerHTML = `<div class="status error">${icon('error')} ${e.message}</div>`; });
   }
   /** 渲染所选阵容 vs 各对手的克制列表（基于现有 matrix.cells，纯前端） */
   function renderMatchups(comp) {
@@ -969,14 +975,14 @@
     if (!rows.length) { matchupListEl.innerHTML = `<div class="insight-empty">暂无对阵数据</div>`; return; }
     // 最强对手 = 对本阵容胜率最低（我方胜率低）且场次达标的对手；最弱对手 = 反之
     const samples = rows.filter((r) => r.total >= 3);
-    const king = samples.length ? samples.slice().sort((a, b) => a.winRate - b.winRate)[0] : null;
+    const hardCounter = samples.length ? samples.slice().sort((a, b) => a.winRate - b.winRate)[0] : null;
     const easy = samples.length ? samples.slice().sort((a, b) => b.winRate - a.winRate)[0] : null;
     const head = `<div class="matchup-head"><span>阵容</span><span>场次</span><span>胜率</span></div>`;
     matchupListEl.innerHTML = head + rows.map((r) => {
       const c = winRateColor(r.winRate);
       const bg = c ? `rgb(${c.join(',')})` : 'rgba(130,140,152,0.28)';
       const fg = c ? textColorFor(c) : '#8b98ad';
-      const mark = king && r.comp === king.comp ? `<span class="the-pill">最强对手</span>`
+      const mark = hardCounter && r.comp === hardCounter.comp ? `<span class="the-pill">最强对手</span>`
         : easy && r.comp === easy.comp ? `<span class="the-pill easy">最弱对手</span>` : '';
       return `<div class="matchup-row"><span class="mu-comp"><span class="mu-label">${escHtml(r.comp)}</span>${mark}</span><span class="mu-count">${r.total}场 · ${r.wins}胜</span><span class="mu-rate" style="background:${bg};color:${fg}">${r.winRate}%</span></div>`;
     }).join('');
@@ -1118,7 +1124,7 @@
       insightAllianceEl.innerHTML = all.map((a) => `<button type="button" class="chip" data-alliance="${escHtml(a)}">${a || '全部'}</button>`).join('');
       Array.from(insightAllianceEl.querySelectorAll('.chip')).forEach((chip) => chip.addEventListener('click', () => {
         insightState.alliance = chip.dataset.alliance || '';
-        Array.from(insightAllianceEl.querySelectorAll('.chip')).forEach((c) => c.classList.toggle('active', c.dataset.alliance === insightState.alliance));
+        setActiveChip(insightAllianceEl, insightState.alliance);
         loadInsight();
       }));
     })
@@ -1763,6 +1769,11 @@
     }
   });
 
+  /** 同盟 chips 高亮共用逻辑：仅将 data-alliance 匹配 activeValue 的 chip 置为 active（洞察页与分析页共用） */
+  function setActiveChip(container, activeValue) {
+    container.querySelectorAll('.chip').forEach((x) => x.classList.toggle('active', x.dataset.alliance === activeValue));
+  }
+
   /** 渲染同盟筛选标签（chips）；具体同盟带删除按钮，可删除该同盟全部战报 */
   function renderAllianceChips(allianceList) {
     const all = ['', ...allianceList];
@@ -1789,7 +1800,7 @@
     const chip = e.target.closest && e.target.closest('.chip');
     if (!chip) return;
     currentAlliance = chip.dataset.alliance || '';
-    allianceChips.querySelectorAll('.chip').forEach((x) => x.classList.toggle('active', x === chip));
+    setActiveChip(allianceChips, currentAlliance);
     loadAnalysis();
   });
 

@@ -14,6 +14,7 @@ server/tmp/
 
 # 运行时生成数据
 server/data/
+.cache_records.json
 
 # 打包压缩文件
 *.zip
