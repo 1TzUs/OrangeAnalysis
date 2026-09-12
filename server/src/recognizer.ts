@@ -134,7 +134,22 @@ const ALLIANCE_ALIASES: Record<string, string> = {
   '宇宙洪荒': '宇宙洪荒',
 };
 
-/** 清理同盟名文本 */
+/**
+ * 同盟标准名匹配：已知同盟名及其 OCR 形近变体列表。
+ * OCR 对部分字形（如"烬"→"烂/炽"）存在稳定误读，识别结果可能是
+ * 标准名的变体；这里把变体精确归一到标准名，确保同一同盟在统计中
+ * 不因字形识别差异被拆成多个。仅命中枚举的完整串，不模糊匹配，避免误伤真实同盟。
+ */
+const ALLIANCE_NAME_MATCH: Record<string, string[]> = {
+  '夜烬天明': ['夜烂天明', '夜炽天明'],
+};
+
+/**
+ * 清理同盟名文本。
+ * 注意：这里**不再**直接删除末尾"噪声后缀字"（如"明"）。
+ * 真实同盟名（如"夜烬天明"）末字可能是合法汉字，无条件删除会误伤；
+ * 疑似徽标粘连字改由 needAllianceRefine 触发高倍精修，以精修结果裁决。
+ */
 export function cleanAlliance(raw: string): string {
   // 先归一化分隔符（竖线/中文竖线/间隔号 → "|"）
   let t = String(raw).replace(/[丨|｜·・]/g, '|');
@@ -145,10 +160,15 @@ export function cleanAlliance(raw: string): string {
   // OCR 常把分隔符"|"误读为"一"或"1"（如"百战一凌云"），当它作为名字中间
   // 的分隔符（两侧各至少 2 字）时归一化回"|"，避免同一同盟被当成多个。
   t = t.replace(/([^|]{2,})[一1]([^|]{2,})/g, '$1|$2');
-  // 兜底去掉末尾已知噪声后缀（高倍 OCR 也可能读回粘连的装饰字）
-  t = t.replace(new RegExp(`[${[...ALLIANCE_NOISE_SUFFIX].join('')}]+$`, 'g'), '');
   // 别名归一化：漏分隔符等 OCR 变体统一回标准名
   t = ALLIANCE_ALIASES[t] ?? t;
+  // 同盟标准名匹配：OCR 形近变体（如"夜烂天明"）归一到标准名（如"夜烬天明"）
+  for (const [std, vars] of Object.entries(ALLIANCE_NAME_MATCH)) {
+    if (vars.includes(t)) {
+      t = std;
+      break;
+    }
+  }
   return t.slice(0, 16);
 }
 
@@ -356,7 +376,8 @@ function extractTopInfo(lines: OcrLine[], cx: number): {
 /**
  * 判断同盟名是否需要高倍 OCR 精修。
  * 同盟名末尾若出现疑似徽标粘连噪声字（如整图 OCR 把"剑来"识别成"剑来画"），
- * 才需要对该区域单独高倍识别；否则信任整图 OCR 结果。
+ * 触发对该区域的高倍识别，以精修结果为准（**不再**直接在 cleanAlliance 里删字）；
+ * 其余情况信任整图 OCR 结果。
  */
 const ALLIANCE_NOISE_SUFFIX = new Set(['画', '盟', '盈', '文', '反', '入', '占', '面', '明', '飞']);
 // 前缀噪声字：整图 OCR 有时把同盟名左侧的淡字/装饰粘连成首字（如"宇宙洪荒"读成"博宇宙洪荒"）。
